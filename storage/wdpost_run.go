@@ -19,8 +19,8 @@ import (
 	"go.opencensus.io/trace"
 	"golang.org/x/xerrors"
 
-	proof2 "github.com/filecoin-project/specs-actors/v2/actors/runtime/proof"
 	"github.com/filecoin-project/specs-actors/v3/actors/runtime/proof"
+	proof7 "github.com/filecoin-project/specs-actors/v7/actors/runtime/proof"
 
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/build"
@@ -567,7 +567,7 @@ func (s *WindowPoStScheduler) runPoStCycle(ctx context.Context, di dline.Info, t
 		for retries := 0; ; retries++ {
 			skipCount := uint64(0)
 			var partitions []miner.PoStPartition
-			var sinfos []proof2.SectorInfo
+			var sinfos []proof7.SectorInfo
 			for partIdx, partition := range batch {
 				// TODO: Can do this in parallel
 				toProve, err := bitfield.SubtractBitField(partition.LiveSectors, partition.FaultySectors)
@@ -636,14 +636,25 @@ func (s *WindowPoStScheduler) runPoStCycle(ctx context.Context, di dline.Info, t
 				return nil, err
 			}
 
+			log.Errorf("actually generating window post")
+			defer func() {
+				if r := recover(); r != nil {
+					log.Errorf("recover: %s", r)
+				}
+			}()
 			postOut, ps, err := s.prover.GenerateWindowPoSt(ctx, abi.ActorID(mid), sinfos, append(abi.PoStRandomness{}, rand...))
 			elapsed := time.Since(tsStart)
-
-			log.Infow("computing window post", "batch", batchIdx, "elapsed", elapsed)
-
+			log.Errorf("A")
+			log.Infof("computing window post", "batch", batchIdx, "elapsed", elapsed)
+			if err != nil {
+				log.Errorf("error generating window post: %s", err)
+			}
 			if err == nil {
+				log.Errorf("B")
+
 				// If we proved nothing, something is very wrong.
 				if len(postOut) == 0 {
+					log.Errorf("len(postOut) == 0")
 					return nil, xerrors.Errorf("received no proofs back from generate window post")
 				}
 
@@ -651,6 +662,7 @@ func (s *WindowPoStScheduler) runPoStCycle(ctx context.Context, di dline.Info, t
 				if err != nil {
 					return nil, xerrors.Errorf("getting current head: %w", err)
 				}
+				log.Errorf("C")
 
 				checkRand, err := s.api.StateGetRandomnessFromBeacon(ctx, crypto.DomainSeparationTag_WindowedPoStChallengeSeed, di.Challenge, buf.Bytes(), headTs.Key())
 				if err != nil {
@@ -658,10 +670,11 @@ func (s *WindowPoStScheduler) runPoStCycle(ctx context.Context, di dline.Info, t
 				}
 
 				if !bytes.Equal(checkRand, rand) {
-					log.Warnw("windowpost randomness changed", "old", rand, "new", checkRand, "ts-height", ts.Height(), "challenge-height", di.Challenge, "tsk", ts.Key())
+					log.Warnf("windowpost randomness changed", "old", rand, "new", checkRand, "ts-height", ts.Height(), "challenge-height", di.Challenge, "tsk", ts.Key())
 					rand = checkRand
 					continue
 				}
+				log.Errorf("D")
 
 				// If we generated an incorrect proof, try again.
 				if correct, err := s.verifier.VerifyWindowPoSt(ctx, proof.WindowPoStVerifyInfo{
@@ -670,13 +683,20 @@ func (s *WindowPoStScheduler) runPoStCycle(ctx context.Context, di dline.Info, t
 					ChallengedSectors: sinfos,
 					Prover:            abi.ActorID(mid),
 				}); err != nil {
-					log.Errorw("window post verification failed", "post", postOut, "error", err)
+					log.Errorf("E")
+
+					log.Errorf("window post verification failed", "post", postOut, "error", err)
 					time.Sleep(5 * time.Second)
 					continue
 				} else if !correct {
-					log.Errorw("generated incorrect window post proof", "post", postOut, "error", err)
+					log.Errorf("F")
+
+					log.Errorf("generated incorrect window post proof", "post", postOut, "error", err)
 					continue
 				}
+				log.Errorf("G")
+
+				log.Errorf("we got a correct window post")
 
 				// Proof generation successful, stop retrying
 				somethingToProve = true
@@ -684,9 +704,10 @@ func (s *WindowPoStScheduler) runPoStCycle(ctx context.Context, di dline.Info, t
 				params.Proofs = postOut
 				break
 			}
+			log.Errorf("H")
 
 			// Proof generation failed, so retry
-
+			log.Errorf("Retry")
 			if len(ps) == 0 {
 				// If we didn't skip any new sectors, we failed
 				// for some other reason and we need to abort.
@@ -694,29 +715,33 @@ func (s *WindowPoStScheduler) runPoStCycle(ctx context.Context, di dline.Info, t
 			}
 			// TODO: maybe mark these as faulty somewhere?
 
-			log.Warnw("generate window post skipped sectors", "sectors", ps, "error", err, "try", retries)
+			log.Warnf("generate window post skipped sectors", "sectors", ps, "error", err, "try", retries)
 
 			// Explicitly make sure we haven't aborted this PoSt
 			// (GenerateWindowPoSt may or may not check this).
 			// Otherwise, we could try to continue proving a
 			// deadline after the deadline has ended.
 			if ctx.Err() != nil {
-				log.Warnw("aborting PoSt due to context cancellation", "error", ctx.Err(), "deadline", di.Index)
+				log.Warnf("aborting PoSt due to context cancellation", "error", ctx.Err(), "deadline", di.Index)
 				return nil, ctx.Err()
 			}
 
 			for _, sector := range ps {
 				postSkipped.Set(uint64(sector.Number))
 			}
+			log.Errorf("I")
+
 		}
 
 		// Nothing to prove for this batch, try the next batch
 		if !somethingToProve {
 			continue
 		}
+		log.Errorf("J")
 
 		posts = append(posts, params)
 	}
+	log.Errorf("K")
 
 	return posts, nil
 }
@@ -766,7 +791,7 @@ func (s *WindowPoStScheduler) batchPartitions(partitions []api.Partition, nv net
 	return batches, nil
 }
 
-func (s *WindowPoStScheduler) sectorsForProof(ctx context.Context, goodSectors, allSectors bitfield.BitField, ts *types.TipSet) ([]proof2.SectorInfo, error) {
+func (s *WindowPoStScheduler) sectorsForProof(ctx context.Context, goodSectors, allSectors bitfield.BitField, ts *types.TipSet) ([]proof7.SectorInfo, error) {
 	sset, err := s.api.StateMinerSectors(ctx, s.actor, &goodSectors, ts.Key())
 	if err != nil {
 		return nil, err
@@ -776,22 +801,22 @@ func (s *WindowPoStScheduler) sectorsForProof(ctx context.Context, goodSectors, 
 		return nil, nil
 	}
 
-	substitute := proof2.SectorInfo{
+	substitute := proof7.SectorInfo{
 		SectorNumber: sset[0].SectorNumber,
 		SealedCID:    sset[0].SealedCID,
 		SealProof:    sset[0].SealProof,
 	}
 
-	sectorByID := make(map[uint64]proof2.SectorInfo, len(sset))
+	sectorByID := make(map[uint64]proof7.SectorInfo, len(sset))
 	for _, sector := range sset {
-		sectorByID[uint64(sector.SectorNumber)] = proof2.SectorInfo{
+		sectorByID[uint64(sector.SectorNumber)] = proof7.SectorInfo{
 			SectorNumber: sector.SectorNumber,
 			SealedCID:    sector.SealedCID,
 			SealProof:    sector.SealProof,
 		}
 	}
 
-	proofSectors := make([]proof2.SectorInfo, 0, len(sset))
+	proofSectors := make([]proof7.SectorInfo, 0, len(sset))
 	if err := allSectors.ForEach(func(sectorNo uint64) error {
 		if info, found := sectorByID[sectorNo]; found {
 			proofSectors = append(proofSectors, info)

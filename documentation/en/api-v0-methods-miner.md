@@ -332,7 +332,9 @@ Inputs:
 ```json
 [
   null,
-  null
+  null,
+  10101,
+  15
 ]
 ```
 

@@ -3,7 +3,9 @@ package sealing
 import (
 	"context"
 
+	"github.com/filecoin-project/go-statemachine"
 	"github.com/filecoin-project/lotus/chain/actors/builtin/miner"
+	market7 "github.com/filecoin-project/specs-actors/v7/actors/builtin/market"
 
 	"golang.org/x/xerrors"
 
@@ -18,14 +20,14 @@ func (m *Sealing) IsMarkedForUpgrade(id abi.SectorNumber) bool {
 	return found
 }
 
-func (m *Sealing) MarkForUpgrade(id abi.SectorNumber) error {
+func (m *Sealing) MarkForUpgrade(ctx context.Context, id abi.SectorNumber) error {
 	m.upgradeLk.Lock()
 	defer m.upgradeLk.Unlock()
 
-	_, found := m.toUpgrade[id]
-	if found {
-		return xerrors.Errorf("sector %d already marked for upgrade", id)
-	}
+	// _, found := m.toUpgrade[id]
+	// if found {
+	// 	return xerrors.Errorf("sector %d already marked for upgrade", id)
+	// }
 
 	si, err := m.GetSectorInfo(id)
 	if err != nil {
@@ -44,11 +46,30 @@ func (m *Sealing) MarkForUpgrade(id abi.SectorNumber) error {
 		return xerrors.Errorf("not a committed-capacity sector, has deals")
 	}
 
-	// TODO: more checks to match actor constraints
+	tok, head, err := m.Api.ChainHead(ctx)
+	if err != nil {
+		return xerrors.Errorf("couldnt get chain head: %w", err)
+	}
+	onChainInfo, err := m.Api.StateSectorGetInfo(ctx, m.maddr, id, tok)
+	if err != nil {
+		return xerrors.Errorf("failed to read sector on chain info: %w", err)
+	}
 
-	m.toUpgrade[id] = struct{}{}
+	if onChainInfo.Expiration-head < market7.DealMinDuration {
+		return xerrors.Errorf("pointless to upgrade sector %d, expiration %d is less than a min deal duration away from current epoch."+
+			"Upgrade expiration before marking for upgrade", id, onChainInfo.Expiration)
+	}
+
+	log.Errorf("updating sector number %d", id)
+	// m.toUpgrade[id] = struct{}{}
+	m.sectors.Send(uint64(id), SectorStartCCUpdate{})
 
 	return nil
+}
+
+func (m *Sealing) handleCCUpdate(ctx statemachine.Context, sector SectorInfo) error {
+	log.Errorf("handle CC %d", sector.SectorNumber)
+	return m.sectors.Send(uint64(sector.SectorNumber), SectorStart{})
 }
 
 func (m *Sealing) tryUpgradeSector(ctx context.Context, params *miner.SectorPreCommitInfo) big.Int {

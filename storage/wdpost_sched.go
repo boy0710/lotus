@@ -86,6 +86,7 @@ func NewWindowedPoStScheduler(api fullNodeFilteredAPI,
 
 func (s *WindowPoStScheduler) Run(ctx context.Context) {
 	// Initialize change handler.
+	log.Errorf("Running Window PoSt scheduler")
 
 	// callbacks is a union of the fullNodeFilteredAPI and ourselves.
 	callbacks := struct {

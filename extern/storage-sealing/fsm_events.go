@@ -1,6 +1,7 @@
 package sealing
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/ipfs/go-cid"
@@ -294,6 +295,54 @@ type SectorFinalizeFailed struct{ error }
 
 func (evt SectorFinalizeFailed) FormatError(xerrors.Printer) (next error) { return evt.error }
 func (evt SectorFinalizeFailed) apply(*SectorInfo)                        {}
+
+// Snap deals // CC update path
+
+type SectorStartCCUpdate struct{}
+
+func (evt SectorStartCCUpdate) apply(state *SectorInfo) {
+	state.CCUpdate = true
+	// Remove filler piece
+	state.Pieces = nil
+}
+
+type SectorReplicaUpdate struct {
+	Out storage.ReplicaUpdateOut
+}
+
+func (evt SectorReplicaUpdate) apply(state *SectorInfo) {
+	fmt.Printf("applying RU stuff to sector info state\n")
+	state.UpdateSealed = &evt.Out.NewSealed
+	state.UpdateUnsealed = &evt.Out.NewUnsealed
+}
+
+type SectorProveReplicaUpdate1 struct {
+	Out storage.ReplicaVanillaProofs
+}
+
+func (evt SectorProveReplicaUpdate1) apply(state *SectorInfo) {
+	state.ProveReplicaUpdate1Out = evt.Out
+}
+
+type SectorProveReplicaUpdate2 struct {
+	Proof storage.ReplicaUpdateProof
+}
+
+func (evt SectorProveReplicaUpdate2) apply(state *SectorInfo) {
+	state.ReplicaUpdateProof = evt.Proof
+}
+
+type SectorReplicaUpdateSubmitted struct {
+	Message cid.Cid
+}
+
+func (evt SectorReplicaUpdateSubmitted) apply(state *SectorInfo) {
+	state.ReplicaUpdateMessage = &evt.Message
+}
+
+type SectorReplicaUpdateLanded struct{}
+
+func (evt SectorReplicaUpdateLanded) apply(state *SectorInfo) {}
 
 // Failed state recovery
 

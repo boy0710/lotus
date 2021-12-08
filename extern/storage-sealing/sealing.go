@@ -121,7 +121,8 @@ type Sealing struct {
 }
 
 type openSector struct {
-	used abi.UnpaddedPieceSize // change to bitfield/rle when AddPiece gains offset support to better fill sectors
+	used       abi.UnpaddedPieceSize // change to bitfield/rle when AddPiece gains offset support to better fill sectors
+	expiration abi.ChainEpoch
 
 	maybeAccept func(cid.Cid) error // called with inputLk
 }

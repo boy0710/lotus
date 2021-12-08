@@ -268,6 +268,15 @@ var runCmd = &cli.Command{
 		if cctx.Bool("commit") {
 			taskTypes = append(taskTypes, sealtasks.TTCommit2)
 		}
+		if cctx.Bool("replicaupdate") {
+			taskTypes = append(taskTypes, sealtasks.TTReplicaUpdate)
+		}
+		if cctx.Bool("provereplicaupdate1") {
+			taskTypes = append(taskTypes, sealtasks.TTProveReplicaUpdate2)
+		}
+		if cctx.Bool("provereplicaupdate2") {
+			taskTypes = append(taskTypes, sealtasks.TTProveReplicaUpdate1)
+		}
 
 		if len(taskTypes) == 0 {
 			return xerrors.Errorf("no task types specified")

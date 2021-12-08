@@ -98,11 +98,14 @@ type SealerConfig struct {
 	ParallelFetchLimit int
 
 	// Local worker config
-	AllowAddPiece   bool
-	AllowPreCommit1 bool
-	AllowPreCommit2 bool
-	AllowCommit     bool
-	AllowUnseal     bool
+	AllowAddPiece            bool
+	AllowPreCommit1          bool
+	AllowPreCommit2          bool
+	AllowCommit              bool
+	AllowUnseal              bool
+	AllowReplicaUpdate       bool
+	AllowProveReplicaUpdate1 bool
+	AllowProveReplicaUpdate2 bool
 
 	// ResourceFiltering instructs the system which resource filtering strategy
 	// to use when evaluating tasks against this worker. An empty value defaults
@@ -160,6 +163,15 @@ func New(ctx context.Context, lstor *stores.Local, stor *stores.Remote, ls store
 	}
 	if sc.AllowUnseal {
 		localTasks = append(localTasks, sealtasks.TTUnseal)
+	}
+	if sc.AllowReplicaUpdate {
+		localTasks = append(localTasks, sealtasks.TTReplicaUpdate)
+	}
+	if sc.AllowProveReplicaUpdate1 {
+		localTasks = append(localTasks, sealtasks.TTProveReplicaUpdate1)
+	}
+	if sc.AllowProveReplicaUpdate2 {
+		localTasks = append(localTasks, sealtasks.TTProveReplicaUpdate2)
 	}
 
 	wcfg := WorkerConfig{
@@ -666,7 +678,7 @@ func (m *Manager) Remove(ctx context.Context, sector storage.SectorRef) error {
 func (m *Manager) ReplicaUpdate(ctx context.Context, sector storage.SectorRef, pieces []abi.PieceInfo) (out storage.ReplicaUpdateOut, err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-
+	log.Errorf("manager is doing replica update")
 	wk, wait, cancel, err := m.getWork(ctx, sealtasks.TTReplicaUpdate, sector, pieces)
 	if err != nil {
 		return storage.ReplicaUpdateOut{}, xerrors.Errorf("getWork: %w", err)
@@ -677,7 +689,7 @@ func (m *Manager) ReplicaUpdate(ctx context.Context, sector storage.SectorRef, p
 	waitRes := func() {
 		p, werr := m.waitWork(ctx, wk)
 		if werr != nil {
-			waitErr = werr
+			waitErr = xerrors.Errorf("waitWork: %w", werr)
 			return
 		}
 		if p != nil {
@@ -697,17 +709,17 @@ func (m *Manager) ReplicaUpdate(ctx context.Context, sector storage.SectorRef, p
 	selector := newAllocSelector(m.index, storiface.FTUpdate|storiface.FTUpdateCache, storiface.PathSealing)
 
 	err = m.sched.Schedule(ctx, sector, sealtasks.TTReplicaUpdate, selector, m.schedFetch(sector, storiface.FTSealed, storiface.PathSealing, storiface.AcquireCopy), func(ctx context.Context, w Worker) error {
-
+		log.Errorf("scheduled work for replica update")
 		err := m.startWork(ctx, w, wk)(w.ReplicaUpdate(ctx, sector, pieces))
 		if err != nil {
-			return err
+			return xerrors.Errorf("startWork: %w", err)
 		}
 
 		waitRes()
 		return nil
 	})
 	if err != nil {
-		return storage.ReplicaUpdateOut{}, err
+		return storage.ReplicaUpdateOut{}, xerrors.Errorf("Schedule: %w", err)
 	}
 	return out, waitErr
 }

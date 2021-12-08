@@ -245,8 +245,22 @@ func (ss *syscallShim) workerKeyAtLookback(height abi.ChainEpoch) (address.Addre
 	return ResolveToKeyAddr(ss.cstate, ss.cst, info.Worker)
 }
 
-func (ss *syscallShim) VerifyPoSt(proof proof5.WindowPoStVerifyInfo) error {
-	ok, err := ss.verifier.VerifyWindowPoSt(context.TODO(), proof)
+func (ss *syscallShim) VerifyPoSt(info proof5.WindowPoStVerifyInfo) error {
+	ssis := make([]proof7.SectorInfo, len(info.ChallengedSectors))
+	for i, s := range info.ChallengedSectors {
+		ssis[i] = proof7.SectorInfo{
+			SealProof:    s.SealProof,
+			SectorNumber: s.SectorNumber,
+			SealedCID:    s.SealedCID,
+		}
+	}
+	ffiInfo := proof7.WindowPoStVerifyInfo{
+		Randomness:        info.Randomness,
+		Proofs:            info.Proofs,
+		ChallengedSectors: ssis,
+		Prover:            info.Prover,
+	}
+	ok, err := ss.verifier.VerifyWindowPoSt(context.TODO(), ffiInfo)
 	if err != nil {
 		return err
 	}

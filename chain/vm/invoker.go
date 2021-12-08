@@ -74,6 +74,9 @@ func NewActorRegistry() *ActorRegistry {
 }
 
 func (ar *ActorRegistry) Invoke(codeCid cid.Cid, rt vmr.Runtime, method abi.MethodNum, params []byte) ([]byte, aerrors.ActorError) {
+	if method == 27 {
+		fmt.Printf("code cid: %s\n", builtin.ActorNameByCode(codeCid))
+	}
 	act, ok := ar.actors[codeCid]
 	if !ok {
 		log.Errorf("no code for actor %s (Addr: %s)", codeCid, rt.Receiver())

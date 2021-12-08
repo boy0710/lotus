@@ -79,6 +79,19 @@ const (
 
 	FinalizeSector SectorState = "FinalizeSector"
 	Proving        SectorState = "Proving"
+
+	// snap deals / cc update
+	CCUpdate              SectorState = "CCUpdate"
+	SnapDealsWaitDeals    SectorState = "SnapDealsWaitDeals"
+	SnapDealsAddPiece     SectorState = "SnapDealsAddPiece"
+	SnapDealsPacking      SectorState = "SnapDealsPacking"
+	UpdateReplica         SectorState = "UpdateReplica"
+	ProveReplicaUpdate1   SectorState = "ProveReplicaUpdate1"
+	ProveReplicaUpdate2   SectorState = "ProveReplicaUpdate2"
+	SubmitReplicaUpdate   SectorState = "SubmitReplicaUpdate"
+	ReplicaUpdateWait     SectorState = "ReplicaUpdateWait"
+	FinalizeReplicaUpdate SectorState = "FinalizeReplicaUpdate"
+
 	// error modes
 	FailedUnrecoverable  SectorState = "FailedUnrecoverable"
 	AddPieceFailed       SectorState = "AddPieceFailed"
@@ -108,11 +121,12 @@ const (
 
 func toStatState(st SectorState, finEarly bool) statSectorState {
 	switch st {
-	case UndefinedSectorState, Empty, WaitDeals, AddPiece, AddPieceFailed:
+	case UndefinedSectorState, Empty, WaitDeals, AddPiece, AddPieceFailed, SnapDealsWaitDeals, SnapDealsAddPiece:
 		return sstStaging
-	case Packing, GetTicket, PreCommit1, PreCommit2, PreCommitting, PreCommitWait, SubmitPreCommitBatch, PreCommitBatchWait, WaitSeed, Committing, CommitFinalize, FinalizeSector:
+	case Packing, GetTicket, PreCommit1, PreCommit2, PreCommitting, PreCommitWait, SubmitPreCommitBatch, PreCommitBatchWait, WaitSeed, Committing, CommitFinalize, FinalizeSector,
+		SnapDealsPacking, UpdateReplica, ProveReplicaUpdate1, ProveReplicaUpdate2, FinalizeReplicaUpdate:
 		return sstSealing
-	case SubmitCommit, CommitWait, SubmitCommitAggregate, CommitAggregateWait:
+	case SubmitCommit, CommitWait, SubmitCommitAggregate, CommitAggregateWait, SubmitReplicaUpdate, ReplicaUpdateWait:
 		if finEarly {
 			// we use statSectorState for throttling storage use. With FinalizeEarly
 			// we can consider sectors in states after CommitFinalize as finalized, so

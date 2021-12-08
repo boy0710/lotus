@@ -242,6 +242,7 @@ func (p *proveHandler) processHeadChange(ctx context.Context, newTS *types.TipSe
 
 	p.current = &currentPost{di: di}
 	curr := p.current
+	log.Errorf("generating post for deadline %d", di.Index)
 	p.current.abort = p.api.startGeneratePoST(ctx, newTS, di, func(posts []miner.SubmitWindowedPoStParams, err error) {
 		p.postResults <- &postResult{ts: newTS, currPost: curr, posts: posts, err: err}
 	})

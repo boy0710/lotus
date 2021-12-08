@@ -133,6 +133,37 @@ var fsmPlanners = map[SectorState]func(events []statemachine.Event, state *Secto
 		on(SectorFinalizeFailed{}, FinalizeFailed),
 	),
 
+	// Snap deals
+	SnapDealsWaitDeals: planOne(
+		on(SectorAddPiece{}, SnapDealsAddPiece),
+		on(SectorStartPacking{}, SnapDealsPacking),
+	),
+	SnapDealsAddPiece: planOne(
+		on(SectorPieceAdded{}, SnapDealsWaitDeals),
+		apply(SectorStartPacking{}),
+		apply(SectorAddPiece{}),
+	),
+	SnapDealsPacking: planOne(
+		on(SectorPacked{}, UpdateReplica),
+	),
+	UpdateReplica: planOne(
+		on(SectorReplicaUpdate{}, ProveReplicaUpdate1),
+	),
+	ProveReplicaUpdate1: planOne(
+		on(SectorProveReplicaUpdate1{}, ProveReplicaUpdate2),
+	),
+	ProveReplicaUpdate2: planOne(
+		on(SectorProveReplicaUpdate2{}, SubmitReplicaUpdate),
+	),
+	SubmitReplicaUpdate: planOne(
+		on(SectorReplicaUpdateSubmitted{}, ReplicaUpdateWait),
+	),
+	ReplicaUpdateWait: planOne(
+		on(SectorReplicaUpdateLanded{}, FinalizeReplicaUpdate),
+	),
+	FinalizeReplicaUpdate: planOne(
+		on(SectorFinalized{}, Proving),
+	),
 	// Sealing errors
 
 	AddPieceFailed: planOne(
@@ -193,6 +224,7 @@ var fsmPlanners = map[SectorState]func(events []statemachine.Event, state *Secto
 	Proving: planOne(
 		on(SectorFaultReported{}, FaultReported),
 		on(SectorFaulty{}, Faulty),
+		on(SectorStartCCUpdate{}, SnapDealsWaitDeals),
 	),
 	Terminating: planOne(
 		on(SectorTerminating{}, TerminateWait),
@@ -402,6 +434,26 @@ func (m *Sealing) plan(events []statemachine.Event, state *SectorInfo) (func(sta
 		fallthrough
 	case FinalizeSector:
 		return m.handleFinalizeSector, processed, nil
+
+	// Snap deals updates
+	case SnapDealsWaitDeals:
+		return m.handleWaitDeals, processed, nil
+	case SnapDealsAddPiece:
+		return m.handleAddPiece, processed, nil
+	case SnapDealsPacking:
+		return m.handlePacking, processed, nil
+	case UpdateReplica:
+		return m.handleReplicaUpdate, processed, nil
+	case ProveReplicaUpdate1:
+		return m.handleProveReplicaUpdate1, processed, nil
+	case ProveReplicaUpdate2:
+		return m.handleProveReplicaUpdate2, processed, nil
+	case SubmitReplicaUpdate:
+		return m.handleSubmitReplicaUpdate, processed, nil
+	case ReplicaUpdateWait:
+		return m.handleReplicaUpdateWait, processed, nil
+	case FinalizeReplicaUpdate:
+		return m.handleFinalizeReplicaUpdate, processed, nil
 
 	// Handled failure modes
 	case AddPieceFailed:

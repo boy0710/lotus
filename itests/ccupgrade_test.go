@@ -7,13 +7,14 @@ import (
 	"time"
 
 	"github.com/filecoin-project/go-state-types/abi"
+	"github.com/filecoin-project/go-state-types/network"
 	"github.com/filecoin-project/lotus/chain/types"
 	"github.com/filecoin-project/lotus/itests/kit"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TODO: This needs to be repurposed into a SnapDeals test suite
 func TestCCUpgrade(t *testing.T) {
 	kit.QuietMiningLogs()
 
@@ -29,11 +30,11 @@ func TestCCUpgrade(t *testing.T) {
 	}
 }
 
-func runTestCCUpgrade(t *testing.T, upgradeHeight abi.ChainEpoch) {
+func runTestCCUpgrade(t *testing.T, upgradeHeight abi.ChainEpoch) *kit.TestFullNode {
 	ctx := context.Background()
 	blockTime := 5 * time.Millisecond
 
-	client, miner, ens := kit.EnsembleMinimal(t, kit.MockProofs(), kit.TurboUpgradeAt(upgradeHeight))
+	client, miner, ens := kit.EnsembleMinimal(t, kit.GenesisNetworkVersion(network.Version15))
 	ens.InterconnectAll().BeginMining(blockTime)
 
 	maddr, err := miner.ActorAddress(ctx)
@@ -41,24 +42,27 @@ func runTestCCUpgrade(t *testing.T, upgradeHeight abi.ChainEpoch) {
 		t.Fatal(err)
 	}
 
-	CC := abi.SectorNumber(kit.DefaultPresealsPerBootstrapMiner + 1)
-	Upgraded := CC + 1
+	CCUpgrade := abi.SectorNumber(kit.DefaultPresealsPerBootstrapMiner + 1)
+	fmt.Printf("CCUpgrade: %d\n", CCUpgrade)
 
 	miner.PledgeSectors(ctx, 1, 0, nil)
 
 	sl, err := miner.SectorsList(ctx)
 	require.NoError(t, err)
 	require.Len(t, sl, 1, "expected 1 sector")
-	require.Equal(t, CC, sl[0], "unexpected sector number")
-
+	require.Equal(t, CCUpgrade, sl[0], "unexpected sector number")
 	{
-		si, err := client.StateSectorGetInfo(ctx, maddr, CC, types.EmptyTSK)
+		si, err := client.StateSectorGetInfo(ctx, maddr, CCUpgrade, types.EmptyTSK)
 		require.NoError(t, err)
 		require.Less(t, 50000, int(si.Expiration))
 	}
 
 	err = miner.SectorMarkForUpgrade(ctx, sl[0])
 	require.NoError(t, err)
+
+	sl, err = miner.SectorsList(ctx)
+	require.NoError(t, err)
+	require.Len(t, sl, 1, "expected 1 sector")
 
 	dh := kit.NewDealHarness(t, client, miner, miner)
 	deal, res, inPath := dh.MakeOnlineDeal(ctx, kit.MakeFullDealParams{
@@ -68,37 +72,25 @@ func runTestCCUpgrade(t *testing.T, upgradeHeight abi.ChainEpoch) {
 	outPath := dh.PerformRetrieval(context.Background(), deal, res.Root, false)
 	kit.AssertFilesEqual(t, inPath, outPath)
 
-	// Validate upgrade
+	status, err := miner.SectorsStatus(ctx, CCUpgrade, true)
+	assert.Equal(t, 1, len(status.Deals))
+	return client
+}
 
-	{
-		exp, err := client.StateSectorExpiration(ctx, maddr, CC, types.EmptyTSK)
-		if err != nil {
-			require.Contains(t, err.Error(), "failed to find sector 3") // already cleaned up
-		} else {
-			require.NoError(t, err)
-			require.NotNil(t, exp)
-			require.Greater(t, 50000, int(exp.OnTime))
-		}
-	}
-	{
-		exp, err := client.StateSectorExpiration(ctx, maddr, Upgraded, types.EmptyTSK)
+func TestCCUpgradeAndPoSt(t *testing.T) {
+	kit.QuietMiningLogs()
+	t.Run("upgrade and then post", func(t *testing.T) {
+		ctx := context.Background()
+		n := runTestCCUpgrade(t, 100)
+		ts, err := n.ChainHead(ctx)
 		require.NoError(t, err)
-		require.Less(t, 50000, int(exp.OnTime))
-	}
-
-	dlInfo, err := client.StateMinerProvingDeadline(ctx, maddr, types.EmptyTSK)
-	require.NoError(t, err)
-
-	// Sector should expire.
-	for {
-		// Wait for the sector to expire.
-		status, err := miner.SectorsStatus(ctx, CC, true)
-		require.NoError(t, err)
-		if status.OnTime == 0 && status.Early == 0 {
-			break
-		}
-		t.Log("waiting for sector to expire")
-		// wait one deadline per loop.
-		time.Sleep(time.Duration(dlInfo.WPoStChallengeWindow) * blockTime)
-	}
+		start := ts.Height()
+		// wait for a full proving period
+		n.WaitTillChain(ctx, func(ts *types.TipSet) bool {
+			if ts.Height() > start+abi.ChainEpoch(2880) {
+				return true
+			}
+			return false
+		})
+	})
 }
