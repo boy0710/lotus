@@ -398,7 +398,7 @@ var sealBenchCmd = &cli.Command{
 			}
 
 			log.Info("computing window post snark (cold)")
-			wproof1, _, err := sb.GenerateWindowPoSt(context.TODO(), mid, sealedSectors, challenge[:])
+			wproof1, _, err := sb.GenerateWindowPoSt(context.TODO(), mid, extendedSealedSectors, challenge[:])
 			if err != nil {
 				return err
 			}
@@ -406,7 +406,7 @@ var sealBenchCmd = &cli.Command{
 			windowpost1 := time.Now()
 
 			log.Info("computing window post snark (hot)")
-			wproof2, _, err := sb.GenerateWindowPoSt(context.TODO(), mid, sealedSectors, challenge[:])
+			wproof2, _, err := sb.GenerateWindowPoSt(context.TODO(), mid, extendedSealedSectors, challenge[:])
 			if err != nil {
 				return err
 			}

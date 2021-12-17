@@ -47,10 +47,13 @@ func (sb *Sealer) GenerateWinningPoSt(ctx context.Context, minerID abi.ActorID, 
 	return ffi.GenerateWinningPoSt(minerID, privsectors, randomness)
 }
 
-func (sb *Sealer) GenerateWindowPoSt(ctx context.Context, minerID abi.ActorID, sectorInfo []proof.SectorInfo, randomness abi.PoStRandomness) ([]proof.PoStProof, []abi.SectorID, error) {
+func (sb *Sealer) GenerateWindowPoSt(ctx context.Context, minerID abi.ActorID, sectorInfo []proof.ExtendedSectorInfo, randomness abi.PoStRandomness) ([]proof.PoStProof, []abi.SectorID, error) {
 	log.Errorf("Generate Window PoST cgo sealer!")
 	randomness[31] &= 0x3f
-	privsectors, skipped, done, err := sb.pubSectorToPriv(ctx, minerID, sectorInfo, nil, abi.RegisteredSealProof.RegisteredWindowPoStProof, func(s proof.SectorInfo) cid.Cid { return s.SealedCID })
+	takeSealed := func(ssi proof.ExtendedSectorInfo) cid.Cid {
+		return ssi.SealedCID
+	}
+	privsectors, skipped, done, err := sb.pubExtendedSectorToPriv(ctx, minerID, sectorInfo, nil, abi.RegisteredSealProof.RegisteredWindowPoStProof, takeSealed)
 	if err != nil {
 		return nil, nil, xerrors.Errorf("gathering sector info: %w", err)
 	}
@@ -104,6 +107,7 @@ func (sb *Sealer) pubExtendedSectorToPriv(ctx context.Context, mid abi.ActorID, 
 		var cache string
 		var sealed string
 		if proveUpdate {
+			log.Errorf("Posting over updated sector for sector id: %d", s.SectorNumber)
 			paths, d, err := sb.sectors.AcquireSector(ctx, sid, storiface.FTUpdateCache|storiface.FTUpdate, 0, storiface.PathStorage)
 			if err != nil {
 				log.Warnw("failed to acquire FTUpdateCache and FTUpdate of sector, skipping", "sector", sid.ID, "error", err)
@@ -114,6 +118,7 @@ func (sb *Sealer) pubExtendedSectorToPriv(ctx context.Context, mid abi.ActorID, 
 			cache = paths.UpdateCache
 			sealed = paths.Update
 		} else {
+			log.Errorf("Posting over sector key sector for sector id: %d", s.SectorNumber)
 			paths, d, err := sb.sectors.AcquireSector(ctx, sid, storiface.FTCache|storiface.FTSealed, 0, storiface.PathStorage)
 			if err != nil {
 				log.Warnw("failed to acquire FTCache and FTSealed of sector, skipping", "sector", sid.ID, "error", err)
@@ -140,61 +145,6 @@ func (sb *Sealer) pubExtendedSectorToPriv(ctx context.Context, mid abi.ActorID, 
 			CacheDirPath:     cache,
 			PoStProofType:    postProofType,
 			SealedSectorPath: sealed,
-			SectorInfo:       ffiInfo,
-		})
-	}
-
-	return ffi.NewSortedPrivateSectorInfo(out...), skipped, done, nil
-}
-
-func (sb *Sealer) pubSectorToPriv(ctx context.Context, mid abi.ActorID, sectorInfo []proof.SectorInfo, faults []abi.SectorNumber, rpt func(abi.RegisteredSealProof) (abi.RegisteredPoStProof, error), proofCID func(proof.SectorInfo) cid.Cid) (ffi.SortedPrivateSectorInfo, []abi.SectorID, func(), error) {
-	fmap := map[abi.SectorNumber]struct{}{}
-	for _, fault := range faults {
-		fmap[fault] = struct{}{}
-	}
-
-	var doneFuncs []func()
-	done := func() {
-		for _, df := range doneFuncs {
-			df()
-		}
-	}
-
-	var skipped []abi.SectorID
-	var out []ffi.PrivateSectorInfo
-	for _, s := range sectorInfo {
-		if _, faulty := fmap[s.SectorNumber]; faulty {
-			continue
-		}
-
-		sid := storage.SectorRef{
-			ID:        abi.SectorID{Miner: mid, Number: s.SectorNumber},
-			ProofType: s.SealProof,
-		}
-
-		paths, d, err := sb.sectors.AcquireSector(ctx, sid, storiface.FTCache|storiface.FTSealed, 0, storiface.PathStorage)
-		if err != nil {
-			log.Warnw("failed to acquire sector, skipping", "sector", sid.ID, "error", err)
-			skipped = append(skipped, sid.ID)
-			continue
-		}
-		doneFuncs = append(doneFuncs, d)
-
-		postProofType, err := rpt(s.SealProof)
-		if err != nil {
-			done()
-			return ffi.SortedPrivateSectorInfo{}, nil, nil, xerrors.Errorf("acquiring registered PoSt proof from sector info %+v: %w", s, err)
-		}
-
-		ffiInfo := ffiproof.SectorInfo{
-			SealProof:    s.SealProof,
-			SectorNumber: s.SectorNumber,
-			SealedCID:    proofCID(s),
-		}
-		out = append(out, ffi.PrivateSectorInfo{
-			CacheDirPath:     paths.Cache,
-			PoStProofType:    postProofType,
-			SealedSectorPath: paths.Sealed,
 			SectorInfo:       ffiInfo,
 		})
 	}

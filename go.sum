@@ -376,10 +376,12 @@ github.com/filecoin-project/specs-actors/v6 v6.0.0/go.mod h1:V1AYfi5GkHXipx1mnVi
 github.com/filecoin-project/specs-actors/v6 v6.0.1 h1:laxvHNsvrq83Y9n+W7znVCePi3oLyRf0Rkl4jFO8Wew=
 github.com/filecoin-project/specs-actors/v6 v6.0.1/go.mod h1:V1AYfi5GkHXipx1mnVivoICZh3wtwPxDVuds+fbfQtk=
 github.com/filecoin-project/specs-actors/v7 v7.0.0-20211117170924-fd07a4c7dff9/go.mod h1:p6LIOFezA1rgRLMewbvdi3Pp6SAu+q9FtJ9CAleSjrE=
-github.com/filecoin-project/specs-actors/v7 v7.0.0-20211118013026-3dce48197cec h1:KV9vE+Sl2Y3qKsrpba4HcE7wHwK7v6O5U/S0xHbje6A=
-github.com/filecoin-project/specs-actors/v7 v7.0.0-20211118013026-3dce48197cec/go.mod h1:p6LIOFezA1rgRLMewbvdi3Pp6SAu+q9FtJ9CAleSjrE=
-github.com/filecoin-project/specs-storage v0.1.1-0.20211213202648-f14267c929ff h1:JO62nquOGhjoDf9+JkAcV+wsD5yhoyIKOMj70ZNdD3Q=
-github.com/filecoin-project/specs-storage v0.1.1-0.20211213202648-f14267c929ff/go.mod h1:nJRRM7Aa9XVvygr3W9k6xGF46RWzr2zxF/iGoAIfA/g=
+github.com/filecoin-project/specs-actors/v7 v7.0.0-20211215204929-57f5fc16b78d h1:bnS+2RUj4GNFi+GEErdXeH9BzRN404zfRjSmzRoTAy8=
+github.com/filecoin-project/specs-actors/v7 v7.0.0-20211215204929-57f5fc16b78d/go.mod h1:p6LIOFezA1rgRLMewbvdi3Pp6SAu+q9FtJ9CAleSjrE=
+github.com/filecoin-project/specs-storage v0.1.1-0.20211215223223-42b171e8e63a h1:gWPeETKsEdgBu4SySGnJAHIl43VqvGrBgfVuyUNo0GM=
+github.com/filecoin-project/specs-storage v0.1.1-0.20211215223223-42b171e8e63a/go.mod h1:s9sFaRLTNfC9X3yk++jKG7T54gi6DJ9Odan0muEp05s=
+github.com/filecoin-project/specs-storage v0.1.1-0.20211217184450-e2d8cd3a3ac6 h1:zssS+xHJGIpN6j5isLXSxStQEVARi52e4pUoVJT/H7A=
+github.com/filecoin-project/specs-storage v0.1.1-0.20211217184450-e2d8cd3a3ac6/go.mod h1:s9sFaRLTNfC9X3yk++jKG7T54gi6DJ9Odan0muEp05s=
 github.com/filecoin-project/test-vectors/schema v0.0.5 h1:w3zHQhzM4pYxJDl21avXjOKBLF8egrvwUwjpT8TquDg=
 github.com/filecoin-project/test-vectors/schema v0.0.5/go.mod h1:iQ9QXLpYWL3m7warwvK1JC/pTri8mnfEmKygNDqqY6E=
 github.com/flynn/go-shlex v0.0.0-20150515145356-3f9db97f8568/go.mod h1:xEzjJPgXI435gkrCt3MPfRiAkVrwSbHsst4LCFVfpJc=

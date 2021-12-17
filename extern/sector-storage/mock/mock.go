@@ -351,7 +351,7 @@ func (mgr *SectorMgr) GenerateWinningPoSt(ctx context.Context, minerID abi.Actor
 	return generateFakePoSt(sectorInfo, abi.RegisteredSealProof.RegisteredWinningPoStProof, randomness), nil
 }
 
-func (mgr *SectorMgr) GenerateWindowPoSt(ctx context.Context, minerID abi.ActorID, sectorInfo []proof.SectorInfo, randomness abi.PoStRandomness) ([]proof.PoStProof, []abi.SectorID, error) {
+func (mgr *SectorMgr) GenerateWindowPoSt(ctx context.Context, minerID abi.ActorID, xSectorInfo []proof.ExtendedSectorInfo, randomness abi.PoStRandomness) ([]proof.PoStProof, []abi.SectorID, error) {
 	mgr.lk.Lock()
 	defer mgr.lk.Unlock()
 
@@ -359,22 +359,22 @@ func (mgr *SectorMgr) GenerateWindowPoSt(ctx context.Context, minerID abi.ActorI
 		return nil, nil, xerrors.Errorf("failed to post (mock)")
 	}
 
-	si := make([]proof.SectorInfo, 0, len(sectorInfo))
+	si := make([]proof.ExtendedSectorInfo, 0, len(xSectorInfo))
 
 	var skipped []abi.SectorID
 
 	var err error
 
-	for _, info := range sectorInfo {
+	for _, xsi := range xSectorInfo {
 		sid := abi.SectorID{
 			Miner:  minerID,
-			Number: info.SectorNumber,
+			Number: xsi.SectorNumber,
 		}
 
 		_, found := mgr.sectors[sid]
 
 		if found && !mgr.sectors[sid].failed && !mgr.sectors[sid].corrupted {
-			si = append(si, info)
+			si = append(si, xsi)
 		} else {
 			skipped = append(skipped, sid)
 			err = xerrors.Errorf("skipped some sectors")
@@ -385,7 +385,16 @@ func (mgr *SectorMgr) GenerateWindowPoSt(ctx context.Context, minerID abi.ActorI
 		return nil, skipped, err
 	}
 
-	return generateFakePoSt(si, abi.RegisteredSealProof.RegisteredWindowPoStProof, randomness), skipped, nil
+	sectorInfo := make([]proof.SectorInfo, len(si))
+	for i, xssi := range si {
+		sectorInfo[i] = proof.SectorInfo{
+			SealProof:    xssi.SealProof,
+			SectorNumber: xssi.SectorNumber,
+			SealedCID:    xssi.SealedCID,
+		}
+	}
+
+	return generateFakePoSt(sectorInfo, abi.RegisteredSealProof.RegisteredWindowPoStProof, randomness), skipped, nil
 }
 
 func generateFakePoStProof(sectorInfo []proof.SectorInfo, randomness abi.PoStRandomness) []byte {

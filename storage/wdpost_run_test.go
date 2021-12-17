@@ -120,7 +120,7 @@ func (m *mockProver) GenerateWinningPoSt(context.Context, abi.ActorID, []proof7.
 	panic("implement me")
 }
 
-func (m *mockProver) GenerateWindowPoSt(ctx context.Context, aid abi.ActorID, sis []proof2.SectorInfo, pr abi.PoStRandomness) ([]proof2.PoStProof, []abi.SectorID, error) {
+func (m *mockProver) GenerateWindowPoSt(ctx context.Context, aid abi.ActorID, sis []proof7.ExtendedSectorInfo, pr abi.PoStRandomness) ([]proof2.PoStProof, []abi.SectorID, error) {
 	return []proof2.PoStProof{
 		{
 			PoStProof:  abi.RegisteredPoStProof_StackedDrgWindow2KiBV1,

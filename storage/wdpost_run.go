@@ -567,7 +567,7 @@ func (s *WindowPoStScheduler) runPoStCycle(ctx context.Context, di dline.Info, t
 		for retries := 0; ; retries++ {
 			skipCount := uint64(0)
 			var partitions []miner.PoStPartition
-			var sinfos []proof7.SectorInfo
+			var xsinfos []proof7.ExtendedSectorInfo
 			for partIdx, partition := range batch {
 				// TODO: Can do this in parallel
 				toProve, err := bitfield.SubtractBitField(partition.LiveSectors, partition.FaultySectors)
@@ -610,14 +610,14 @@ func (s *WindowPoStScheduler) runPoStCycle(ctx context.Context, di dline.Info, t
 					continue
 				}
 
-				sinfos = append(sinfos, ssi...)
+				xsinfos = append(xsinfos, ssi...)
 				partitions = append(partitions, miner.PoStPartition{
 					Index:   uint64(batchPartitionStartIdx + partIdx),
 					Skipped: skipped,
 				})
 			}
 
-			if len(sinfos) == 0 {
+			if len(xsinfos) == 0 {
 				// nothing to prove for this batch
 				break
 			}
@@ -642,7 +642,7 @@ func (s *WindowPoStScheduler) runPoStCycle(ctx context.Context, di dline.Info, t
 					log.Errorf("recover: %s", r)
 				}
 			}()
-			postOut, ps, err := s.prover.GenerateWindowPoSt(ctx, abi.ActorID(mid), sinfos, append(abi.PoStRandomness{}, rand...))
+			postOut, ps, err := s.prover.GenerateWindowPoSt(ctx, abi.ActorID(mid), xsinfos, append(abi.PoStRandomness{}, rand...))
 			elapsed := time.Since(tsStart)
 			log.Errorf("A")
 			log.Infof("computing window post", "batch", batchIdx, "elapsed", elapsed)
@@ -677,6 +677,14 @@ func (s *WindowPoStScheduler) runPoStCycle(ctx context.Context, di dline.Info, t
 				log.Errorf("D")
 
 				// If we generated an incorrect proof, try again.
+				sinfos := make([]proof7.SectorInfo, len(xsinfos))
+				for i, xsi := range xsinfos {
+					sinfos[i] = proof7.SectorInfo{
+						SealProof:    xsi.SealProof,
+						SectorNumber: xsi.SectorNumber,
+						SealedCID:    xsi.SealedCID,
+					}
+				}
 				if correct, err := s.verifier.VerifyWindowPoSt(ctx, proof.WindowPoStVerifyInfo{
 					Randomness:        abi.PoStRandomness(checkRand),
 					Proofs:            postOut,
@@ -791,7 +799,7 @@ func (s *WindowPoStScheduler) batchPartitions(partitions []api.Partition, nv net
 	return batches, nil
 }
 
-func (s *WindowPoStScheduler) sectorsForProof(ctx context.Context, goodSectors, allSectors bitfield.BitField, ts *types.TipSet) ([]proof7.SectorInfo, error) {
+func (s *WindowPoStScheduler) sectorsForProof(ctx context.Context, goodSectors, allSectors bitfield.BitField, ts *types.TipSet) ([]proof7.ExtendedSectorInfo, error) {
 	sset, err := s.api.StateMinerSectors(ctx, s.actor, &goodSectors, ts.Key())
 	if err != nil {
 		return nil, err
@@ -801,22 +809,26 @@ func (s *WindowPoStScheduler) sectorsForProof(ctx context.Context, goodSectors, 
 		return nil, nil
 	}
 
-	substitute := proof7.SectorInfo{
+	substitute := proof7.ExtendedSectorInfo{
 		SectorNumber: sset[0].SectorNumber,
 		SealedCID:    sset[0].SealedCID,
 		SealProof:    sset[0].SealProof,
+		SectorKey:    sset[0].SectorKeyCID,
+		Activation:   sset[0].Activation,
 	}
 
-	sectorByID := make(map[uint64]proof7.SectorInfo, len(sset))
+	sectorByID := make(map[uint64]proof7.ExtendedSectorInfo, len(sset))
 	for _, sector := range sset {
-		sectorByID[uint64(sector.SectorNumber)] = proof7.SectorInfo{
+		sectorByID[uint64(sector.SectorNumber)] = proof7.ExtendedSectorInfo{
 			SectorNumber: sector.SectorNumber,
 			SealedCID:    sector.SealedCID,
 			SealProof:    sector.SealProof,
+			SectorKey:    sector.SectorKeyCID,
+			Activation:   sector.Activation,
 		}
 	}
 
-	proofSectors := make([]proof7.SectorInfo, 0, len(sset))
+	proofSectors := make([]proof7.ExtendedSectorInfo, 0, len(sset))
 	if err := allSectors.ForEach(func(sectorNo uint64) error {
 		if info, found := sectorByID[sectorNo]; found {
 			proofSectors = append(proofSectors, info)
