@@ -66,6 +66,7 @@ func main() {
 		chainCmd,
 		balancerCmd,
 		terminationsCmd,
+		migrationsCmd,
 	}
 
 	app := &cli.App{
