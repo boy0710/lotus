@@ -45,6 +45,16 @@ var ExistSectorStateList = map[SectorState]struct{}{
 	Removing:              {},
 	RemoveFailed:          {},
 	Removed:               {},
+	CCUpdate:              {},
+	SnapDealsWaitDeals:    {},
+	SnapDealsAddPiece:     {},
+	SnapDealsPacking:      {},
+	UpdateReplica:         {},
+	ProveReplicaUpdate1:   {},
+	ProveReplicaUpdate2:   {},
+	SubmitReplicaUpdate:   {},
+	ReplicaUpdateWait:     {},
+	FinalizeReplicaUpdate: {},
 }
 
 const (

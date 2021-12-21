@@ -55,6 +55,22 @@ func (m *Sealing) MarkForUpgrade(ctx context.Context, id abi.SectorNumber) error
 		return xerrors.Errorf("failed to read sector on chain info: %w", err)
 	}
 
+	active, err := m.Api.StateMinerActiveSectors(ctx, m.maddr, tok)
+	if err != nil {
+		return xerrors.Errorf("failed to check active sectors: %w", err)
+	}
+	// Look for a match
+	var found bool
+	for _, si := range active {
+		if si.SectorNumber == id {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return xerrors.Errorf("cannot mark inactive sector for upgrade")
+	}
+
 	if onChainInfo.Expiration-head < market7.DealMinDuration {
 		return xerrors.Errorf("pointless to upgrade sector %d, expiration %d is less than a min deal duration away from current epoch."+
 			"Upgrade expiration before marking for upgrade", id, onChainInfo.Expiration)
