@@ -21,14 +21,35 @@ func (m *Sealing) IsMarkedForUpgrade(id abi.SectorNumber) bool {
 }
 
 func (m *Sealing) MarkForUpgrade(ctx context.Context, id abi.SectorNumber) error {
+
 	m.upgradeLk.Lock()
 	defer m.upgradeLk.Unlock()
 
-	// _, found := m.toUpgrade[id]
-	// if found {
-	// 	return xerrors.Errorf("sector %d already marked for upgrade", id)
-	// }
+	_, found := m.toUpgrade[id]
+	if found {
+		return xerrors.Errorf("sector %d already marked for upgrade", id)
+	}
 
+	si, err := m.GetSectorInfo(id)
+	if err != nil {
+		return xerrors.Errorf("getting sector info: %w", err)
+	}
+	if si.State != Proving {
+		return xerrors.Errorf("can't mark sectors not in the 'Proving' state for upgrade")
+	}
+	if len(si.Pieces) != 1 {
+		return xerrors.Errorf("not a committed-capacity sector, expected 1 piece")
+	}
+	if si.Pieces[0].DealInfo != nil {
+		return xerrors.Errorf("not a committed-capacity sector, has deals")
+	}
+
+	m.toUpgrade[id] = struct{}{}
+
+	return nil
+}
+
+func (m *Sealing) MarkForSnapUpgrade(ctx context.Context, id abi.SectorNumber) error {
 	si, err := m.GetSectorInfo(id)
 	if err != nil {
 		return xerrors.Errorf("getting sector info: %w", err)
@@ -59,7 +80,7 @@ func (m *Sealing) MarkForUpgrade(ctx context.Context, id abi.SectorNumber) error
 	if err != nil {
 		return xerrors.Errorf("failed to check active sectors: %w", err)
 	}
-	// Look for a match
+	// Ensure the upgraded sector is active
 	var found bool
 	for _, si := range active {
 		if si.SectorNumber == id {
@@ -77,7 +98,6 @@ func (m *Sealing) MarkForUpgrade(ctx context.Context, id abi.SectorNumber) error
 	}
 
 	log.Errorf("updating sector number %d", id)
-	// m.toUpgrade[id] = struct{}{}
 	m.sectors.Send(uint64(id), SectorStartCCUpdate{})
 
 	return nil

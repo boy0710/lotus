@@ -387,8 +387,8 @@ func (sm *StorageMinerAPI) SectorPreCommitPending(ctx context.Context) ([]abi.Se
 	return sm.Miner.SectorPreCommitPending(ctx)
 }
 
-func (sm *StorageMinerAPI) SectorMarkForUpgrade(ctx context.Context, id abi.SectorNumber) error {
-	return sm.Miner.MarkForUpgrade(ctx, id)
+func (sm *StorageMinerAPI) SectorMarkForUpgrade(ctx context.Context, id abi.SectorNumber, snap bool) error {
+	return sm.Miner.MarkForUpgrade(ctx, id, snap)
 }
 
 func (sm *StorageMinerAPI) SectorCommitFlush(ctx context.Context) ([]sealiface.CommitBatchRes, error) {

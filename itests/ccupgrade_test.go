@@ -57,7 +57,7 @@ func runTestCCUpgrade(t *testing.T, upgradeHeight abi.ChainEpoch) *kit.TestFullN
 		require.Less(t, 50000, int(si.Expiration))
 	}
 
-	err = miner.SectorMarkForUpgrade(ctx, sl[0])
+	err = miner.SectorMarkForUpgrade(ctx, sl[0], true)
 	require.NoError(t, err)
 
 	sl, err = miner.SectorsList(ctx)

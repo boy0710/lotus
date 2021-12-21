@@ -20,6 +20,7 @@ import (
 	"github.com/filecoin-project/go-bitfield"
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/go-state-types/big"
+	"github.com/filecoin-project/go-state-types/network"
 	miner5 "github.com/filecoin-project/specs-actors/v5/actors/builtin/miner"
 
 	"github.com/filecoin-project/lotus/api"
@@ -1476,6 +1477,44 @@ var sectorsRemoveCmd = &cli.Command{
 	},
 }
 
+var sectorsSnapUpCmd = &cli.Command{
+	Name:      "snap-up",
+	Usage:     "Mark a committed capacity sector to be filled with deals",
+	ArgsUsage: "<sectorNum>",
+	Action: func(cctx *cli.Context) error {
+		if cctx.Args().Len() != 1 {
+			return lcli.ShowHelp(cctx, xerrors.Errorf("must pass sector number"))
+		}
+
+		nodeApi, closer, err := lcli.GetStorageMinerAPI(cctx)
+		if err != nil {
+			return err
+		}
+		defer closer()
+		api, nCloser, err := lcli.GetFullNodeAPI(cctx)
+		if err != nil {
+			return err
+		}
+		defer nCloser()
+		ctx := lcli.ReqContext(cctx)
+
+		nv, err := api.StateNetworkVersion(ctx, types.EmptyTSK)
+		if err != nil {
+			return xerrors.Errorf("failed to get network version: %w", err)
+		}
+		if nv < network.Version15 {
+			return xerrors.Errorf("snap deals upgrades enabled in network v15")
+		}
+
+		id, err := strconv.ParseUint(cctx.Args().Get(0), 10, 64)
+		if err != nil {
+			return xerrors.Errorf("could not parse sector number: %w", err)
+		}
+
+		return nodeApi.SectorMarkForUpgrade(ctx, abi.SectorNumber(id), true)
+	},
+}
+
 var sectorsMarkForUpgradeCmd = &cli.Command{
 	Name:      "mark-for-upgrade",
 	Usage:     "Mark a committed capacity sector for replacement by a sector with deals",
@@ -1497,7 +1536,7 @@ var sectorsMarkForUpgradeCmd = &cli.Command{
 			return xerrors.Errorf("could not parse sector number: %w", err)
 		}
 
-		return nodeApi.SectorMarkForUpgrade(ctx, abi.SectorNumber(id))
+		return nodeApi.SectorMarkForUpgrade(ctx, abi.SectorNumber(id), false)
 	},
 }
 

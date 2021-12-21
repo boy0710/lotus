@@ -759,7 +759,7 @@ type StorageMinerStruct struct {
 
 		SectorGetSealDelay func(p0 context.Context) (time.Duration, error) `perm:"read"`
 
-		SectorMarkForUpgrade func(p0 context.Context, p1 abi.SectorNumber) error `perm:"admin"`
+		SectorMarkForUpgrade func(p0 context.Context, p1 abi.SectorNumber, p2 bool) error `perm:"admin"`
 
 		SectorPreCommitFlush func(p0 context.Context) ([]sealiface.PreCommitBatchRes, error) `perm:"admin"`
 
@@ -4470,14 +4470,14 @@ func (s *StorageMinerStub) SectorGetSealDelay(p0 context.Context) (time.Duration
 	return *new(time.Duration), ErrNotSupported
 }
 
-func (s *StorageMinerStruct) SectorMarkForUpgrade(p0 context.Context, p1 abi.SectorNumber) error {
+func (s *StorageMinerStruct) SectorMarkForUpgrade(p0 context.Context, p1 abi.SectorNumber, p2 bool) error {
 	if s.Internal.SectorMarkForUpgrade == nil {
 		return ErrNotSupported
 	}
-	return s.Internal.SectorMarkForUpgrade(p0, p1)
+	return s.Internal.SectorMarkForUpgrade(p0, p1, p2)
 }
 
-func (s *StorageMinerStub) SectorMarkForUpgrade(p0 context.Context, p1 abi.SectorNumber) error {
+func (s *StorageMinerStub) SectorMarkForUpgrade(p0 context.Context, p1 abi.SectorNumber, p2 bool) error {
 	return ErrNotSupported
 }
 

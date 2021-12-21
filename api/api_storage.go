@@ -100,8 +100,8 @@ type StorageMiner interface {
 	// Returns null if message wasn't sent
 	SectorTerminateFlush(ctx context.Context) (*cid.Cid, error) //perm:admin
 	// SectorTerminatePending returns a list of pending sector terminations to be sent in the next batch message
-	SectorTerminatePending(ctx context.Context) ([]abi.SectorID, error)  //perm:admin
-	SectorMarkForUpgrade(ctx context.Context, id abi.SectorNumber) error //perm:admin
+	SectorTerminatePending(ctx context.Context) ([]abi.SectorID, error)             //perm:admin
+	SectorMarkForUpgrade(ctx context.Context, id abi.SectorNumber, snap bool) error //perm:admin
 	// SectorPreCommitFlush immediately sends a PreCommit message with sectors batched for PreCommit.
 	// Returns null if message wasn't sent
 	SectorPreCommitFlush(ctx context.Context) ([]sealiface.PreCommitBatchRes, error) //perm:admin

@@ -1961,7 +1961,8 @@ Perms: admin
 Inputs:
 ```json
 [
-  9
+  9,
+  true
 ]
 ```
 
