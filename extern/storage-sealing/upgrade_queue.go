@@ -98,9 +98,7 @@ func (m *Sealing) MarkForSnapUpgrade(ctx context.Context, id abi.SectorNumber) e
 	}
 
 	log.Errorf("updating sector number %d", id)
-	m.sectors.Send(uint64(id), SectorStartCCUpdate{})
-
-	return nil
+	return m.sectors.Send(uint64(id), SectorStartCCUpdate{})
 }
 
 func (m *Sealing) handleCCUpdate(ctx statemachine.Context, sector SectorInfo) error {

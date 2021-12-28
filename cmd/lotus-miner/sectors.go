@@ -51,6 +51,7 @@ var sectorsCmd = &cli.Command{
 		sectorsExtendCmd,
 		sectorsTerminateCmd,
 		sectorsRemoveCmd,
+		sectorsSnapUpCmd,
 		sectorsMarkForUpgradeCmd,
 		sectorsStartSealCmd,
 		sectorsSealDelayCmd,
