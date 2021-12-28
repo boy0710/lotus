@@ -59,6 +59,7 @@ var ExistSectorStateList = map[SectorState]struct{}{
 	SnapDealsDealsExpired:   {},
 	SnapDealsRecoverDealIDs: {},
 	ReplicaUpdateFailed:     {},
+	AbortUpgrade:            {},
 }
 
 const (

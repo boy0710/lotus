@@ -529,6 +529,8 @@ func (m *Sealing) plan(events []statemachine.Event, state *SectorInfo) (func(sta
 		return m.handleSnapDealsRecoverDealIDs, processed, nil
 	case ReplicaUpdateFailed:
 		return m.handleSubmitReplicaUpdateFailed, processed, nil
+	case AbortUpgrade:
+		return m.handleAbortUpgrade, processed, nil
 
 	// Post-seal
 	case Proving:
