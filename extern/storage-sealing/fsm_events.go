@@ -455,6 +455,18 @@ func (evt SectorRevertUpgradeToProving) apply(state *SectorInfo) {
 	state.CCPieces = nil
 }
 
+type SectorRetrySubmitReplicaUpdateWait struct{}
+
+func (evt SectorRetrySubmitReplicaUpdateWait) apply(state *SectorInfo) {}
+
+type SectorRetrySubmitReplicaUpdate struct{}
+
+func (evt SectorRetrySubmitReplicaUpdate) apply(state *SectorInfo) {}
+
+type SectorSubmitReplicaUpdateFailed struct{}
+
+func (evt SectorSubmitReplicaUpdateFailed) apply(state *SectorInfo) {}
+
 // Faults
 
 type SectorFaulty struct{}

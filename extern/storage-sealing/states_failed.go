@@ -1,11 +1,13 @@
 package sealing
 
 import (
+	"context"
 	"time"
 
 	"github.com/hashicorp/go-multierror"
 	"golang.org/x/xerrors"
 
+	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/lotus/chain/actors/builtin/market"
 	"github.com/filecoin-project/lotus/chain/actors/builtin/miner"
 
@@ -181,6 +183,70 @@ func (m *Sealing) handleComputeProofFailed(ctx statemachine.Context, sector Sect
 	return ctx.Send(SectorRetryComputeProof{})
 }
 
+func (m *Sealing) handleSubmitReplicaUpdateFailed(ctx statemachine.Context, sector SectorInfo) error {
+	if sector.ReplicaUpdateMessage != nil {
+		mw, err := m.Api.StateSearchMsg(ctx.Context(), *sector.ReplicaUpdateMessage)
+		if err != nil {
+			// API error
+			if err := failedCooldown(ctx, sector); err != nil {
+				return err
+			}
+
+			return ctx.Send(SectorRetrySubmitReplicaUpdateWait{})
+		}
+
+		if mw == nil {
+			return ctx.Send(SectorRetrySubmitReplicaUpdateWait{})
+		}
+
+		switch mw.Receipt.ExitCode {
+		case exitcode.Ok:
+			return ctx.Send(SectorRetrySubmitReplicaUpdateWait{})
+		case exitcode.SysErrOutOfGas:
+			return ctx.Send(SectorRetrySubmitReplicaUpdate{})
+		default:
+			// something else went wrong
+		}
+	}
+
+	tok, _, err := m.Api.ChainHead(ctx.Context())
+	if err != nil {
+		log.Errorf("handleCommitting: api error, not proceeding: %+v", err)
+		return nil
+	}
+
+	if err := checkReplicaUpdate(ctx.Context(), m.maddr, sector, tok, m.Api); err != nil {
+		switch err.(type) {
+		case *ErrApi:
+			log.Errorf("handleSubmitReplicaUpdateFailed: api error, not proceeding: %+v", err)
+			return nil
+		case *ErrBadRU:
+			log.Errorf("bad replica update: %+v", err)
+			return ctx.Send(SectorRetryReplicaUpdate{})
+		case *ErrBadPR1:
+			log.Errorf("bad PR1: +%v", err)
+			return ctx.Send(SectorRetryProveReplicaUpdate1{})
+		case *ErrBadPR2:
+			log.Errorf("bad PR2: +%v", err)
+			return ctx.Send(SectorRetryProveReplicaUpdate2{})
+
+		case *ErrInvalidDeals:
+			return ctx.Send(SectorInvalidDealIDs{})
+		case *ErrExpiredDeals:
+			return ctx.Send(SectorDealsExpired{xerrors.Errorf("expired dealIDs in sector: %w", err)})
+		default:
+			log.Errorf("sanity check error not, not proceeding: +%v", err)
+			return xerrors.Errorf("checkPieces sanity check error: %w", err)
+		}
+	}
+
+	if err := failedCooldown(ctx, sector); err != nil {
+		return err
+	}
+
+	return ctx.Send(SectorRetrySubmitReplicaUpdate{})
+}
+
 func (m *Sealing) handleCommitFailed(ctx statemachine.Context, sector SectorInfo) error {
 	tok, _, err := m.Api.ChainHead(ctx.Context())
 	if err != nil {
@@ -334,63 +400,24 @@ func (m *Sealing) handleAbortUpgrade(ctx statemachine.Context, sector SectorInfo
 	}
 
 	// Remove snap deals replica if any
+	if err := m.sealer.ReleaseReplicaUpgrade(ctx.Context(), m.minerSector(sector.SectorType, sector.SectorNumber)); err != nil {
+		return xerrors.Errorf("removing CC update files from sector storage")
+	}
+	return ctx.Send(SectorRevertUpgradeToProving{})
 }
 
 func (m *Sealing) HandleRecoverDealIDs(ctx Context, sector SectorInfo) error {
-	tok, height, err := m.Api.ChainHead(ctx.Context())
+	toFix, paddingPieces, err := recoveryPiecesToFix(ctx.Context(), m.Api, sector, m.maddr)
 	if err != nil {
-		return xerrors.Errorf("getting chain head: %w", err)
+		return err
 	}
-
-	var toFix []int
-	paddingPieces := 0
-
-	for i, p := range sector.Pieces {
-		// if no deal is associated with the piece, ensure that we added it as
-		// filler (i.e. ensure that it has a zero PieceCID)
-		if p.DealInfo == nil {
-			exp := zerocomm.ZeroPieceCommitment(p.Piece.Size.Unpadded())
-			if !p.Piece.PieceCID.Equals(exp) {
-				return xerrors.Errorf("sector %d piece %d had non-zero PieceCID %+v", sector.SectorNumber, i, p.Piece.PieceCID)
-			}
-			paddingPieces++
-			continue
-		}
-
-		proposal, err := m.Api.StateMarketStorageDealProposal(ctx.Context(), p.DealInfo.DealID, tok)
-		if err != nil {
-			log.Warnf("getting deal %d for piece %d: %+v", p.DealInfo.DealID, i, err)
-			toFix = append(toFix, i)
-			continue
-		}
-
-		if proposal.Provider != m.maddr {
-			log.Warnf("piece %d (of %d) of sector %d refers deal %d with wrong provider: %s != %s", i, len(sector.Pieces), sector.SectorNumber, p.DealInfo.DealID, proposal.Provider, m.maddr)
-			toFix = append(toFix, i)
-			continue
-		}
-
-		if proposal.PieceCID != p.Piece.PieceCID {
-			log.Warnf("piece %d (of %d) of sector %d refers deal %d with wrong PieceCID: %s != %s", i, len(sector.Pieces), sector.SectorNumber, p.DealInfo.DealID, p.Piece.PieceCID, proposal.PieceCID)
-			toFix = append(toFix, i)
-			continue
-		}
-
-		if p.Piece.Size != proposal.PieceSize {
-			log.Warnf("piece %d (of %d) of sector %d refers deal %d with different size: %d != %d", i, len(sector.Pieces), sector.SectorNumber, p.DealInfo.DealID, p.Piece.Size, proposal.PieceSize)
-			toFix = append(toFix, i)
-			continue
-		}
-
-		if height >= proposal.StartEpoch {
-			// TODO: check if we are in an early enough state (before precommit), try to remove the offending pieces
-			//  (tricky as we have to 'defragment' the sector while doing that, and update piece references for retrieval)
-			return xerrors.Errorf("can't fix sector deals: piece %d (of %d) of sector %d refers expired deal %d - should start at %d, head %d", i, len(sector.Pieces), sector.SectorNumber, p.DealInfo.DealID, proposal.StartEpoch, height)
-		}
+	tok, _, err := m.Api.ChainHead(ctx.Context())
+	if err != nil {
+		return err
 	}
-
 	failed := map[int]error{}
 	updates := map[int]abi.DealID{}
+
 	for _, i := range toFix {
 		p := sector.Pieces[i]
 
@@ -448,26 +475,150 @@ func (m *Sealing) HandleRecoverDealIDs(ctx Context, sector SectorInfo) error {
 	return ctx.Send(SectorUpdateDealIDs{Updates: updates})
 }
 
-func (m *Sealing) handleReplicaUpdateFailed(ctx statemachine.Context, sector SectorInfo) error {
-	if err := failedCooldown(ctx, sector); err != nil {
+func (m *Sealing) handleSnapDealsRecoverDealIDs(ctx statemachine.Context, sector SectorInfo) error {
+	toFix, paddingPieces, err := recoveryPiecesToFix(ctx.Context(), m.Api, sector, m.maddr)
+	if err != nil {
 		return err
 	}
-
-	return ctx.Send(SectorRetryReplicaUpdate{})
-}
-
-func (m *Sealing) handleProveReplicaUpdate1Failed(ctx statemachine.Context, sector SectorInfo) error {
-	if err := failedCooldown(ctx, sector); err != nil {
+	tok, _, err := m.Api.ChainHead(ctx.Context())
+	if err != nil {
 		return err
 	}
+	failed := map[int]error{}
+	updates := map[int]abi.DealID{}
+	for _, i := range toFix {
+		p := sector.Pieces[i]
 
-	return ctx.Send(SectorRetryProveReplicaUpdate1{})
-}
+		if p.DealInfo.PublishCid == nil {
+			// TODO: check if we are in an early enough state try to remove this piece
+			log.Errorf("can't fix sector deals: piece %d (of %d) of sector %d has nil DealInfo.PublishCid (refers to deal %d)", i, len(sector.Pieces), sector.SectorNumber, p.DealInfo.DealID)
+			// Not much to do here (and this can only happen for old spacerace sectors)
+			return ctx.Send(SectorAbortUpgrade{})
+		}
 
-func (m *Sealing) handleProveReplicaUpdate2Failed(ctx statemachine.Context, sector SectorInfo) error {
-	if err := failedCooldown(ctx, sector); err != nil {
-		return err
+		var dp *market.DealProposal
+		if p.DealInfo.DealProposal != nil {
+			mdp := market.DealProposal(*p.DealInfo.DealProposal)
+			dp = &mdp
+		}
+		res, err := m.DealInfo.GetCurrentDealInfo(ctx.Context(), tok, dp, *p.DealInfo.PublishCid)
+		if err != nil {
+			failed[i] = xerrors.Errorf("getting current deal info for piece %d: %w", i, err)
+			continue
+		}
+
+		if res.MarketDeal == nil {
+			failed[i] = xerrors.Errorf("nil market deal (%d,%d,%d,%s)", i, sector.SectorNumber, p.DealInfo.DealID, p.Piece.PieceCID)
+			continue
+		}
+
+		if res.MarketDeal.Proposal.PieceCID != p.Piece.PieceCID {
+			failed[i] = xerrors.Errorf("recovered piece (%d) deal in sector %d (dealid %d) has different PieceCID %s != %s", i, sector.SectorNumber, p.DealInfo.DealID, p.Piece.PieceCID, res.MarketDeal.Proposal.PieceCID)
+			continue
+		}
+
+		updates[i] = res.DealID
 	}
 
-	return ctx.Send(SectorRetryProveReplicaUpdate2{})
+	if len(failed) > 0 {
+		var merr error
+		for _, e := range failed {
+			merr = multierror.Append(merr, e)
+		}
+
+		if len(failed)+paddingPieces == len(sector.Pieces) {
+			log.Errorf("removing sector %d: all deals expired or unrecoverable: %+v", sector.SectorNumber, merr)
+			return ctx.Send(SectorAbortUpgrade{})
+		}
+
+		// todo: try to remove bad pieces (hard; see the todo above)
+
+		// for now removing sectors is probably better than having them stuck in RecoverDealIDs
+		// and expire anyways
+		log.Errorf("removing sector %d: deals expired or unrecoverable: %+v", sector.SectorNumber, merr)
+		return ctx.Send(SectorAbortUpgrade{})
+	}
+
+	// Not much to do here, we can't go back in time to commit this sector
+	return ctx.Send(SectorUpdateDealIDs{Updates: updates})
 }
+
+func recoveryPiecesToFix(ctx context.Context, api SealingAPI, sector SectorInfo, maddr address.Address) ([]int, int, error) {
+	tok, height, err := api.ChainHead(ctx)
+	if err != nil {
+		return nil, 0, xerrors.Errorf("getting chain head: %w", err)
+	}
+
+	var toFix []int
+	paddingPieces := 0
+
+	for i, p := range sector.Pieces {
+		// if no deal is associated with the piece, ensure that we added it as
+		// filler (i.e. ensure that it has a zero PieceCID)
+		if p.DealInfo == nil {
+			exp := zerocomm.ZeroPieceCommitment(p.Piece.Size.Unpadded())
+			if !p.Piece.PieceCID.Equals(exp) {
+				return nil, 0, xerrors.Errorf("sector %d piece %d had non-zero PieceCID %+v", sector.SectorNumber, i, p.Piece.PieceCID)
+			}
+			paddingPieces++
+			continue
+		}
+
+		proposal, err := api.StateMarketStorageDealProposal(ctx, p.DealInfo.DealID, tok)
+		if err != nil {
+			log.Warnf("getting deal %d for piece %d: %+v", p.DealInfo.DealID, i, err)
+			toFix = append(toFix, i)
+			continue
+		}
+
+		if proposal.Provider != maddr {
+			log.Warnf("piece %d (of %d) of sector %d refers deal %d with wrong provider: %s != %s", i, len(sector.Pieces), sector.SectorNumber, p.DealInfo.DealID, proposal.Provider, maddr)
+			toFix = append(toFix, i)
+			continue
+		}
+
+		if proposal.PieceCID != p.Piece.PieceCID {
+			log.Warnf("piece %d (of %d) of sector %d refers deal %d with wrong PieceCID: %s != %s", i, len(sector.Pieces), sector.SectorNumber, p.DealInfo.DealID, p.Piece.PieceCID, proposal.PieceCID)
+			toFix = append(toFix, i)
+			continue
+		}
+
+		if p.Piece.Size != proposal.PieceSize {
+			log.Warnf("piece %d (of %d) of sector %d refers deal %d with different size: %d != %d", i, len(sector.Pieces), sector.SectorNumber, p.DealInfo.DealID, p.Piece.Size, proposal.PieceSize)
+			toFix = append(toFix, i)
+			continue
+		}
+
+		if height >= proposal.StartEpoch {
+			// TODO: check if we are in an early enough state (before precommit), try to remove the offending pieces
+			//  (tricky as we have to 'defragment' the sector while doing that, and update piece references for retrieval)
+			return nil, 0, xerrors.Errorf("can't fix sector deals: piece %d (of %d) of sector %d refers expired deal %d - should start at %d, head %d", i, len(sector.Pieces), sector.SectorNumber, p.DealInfo.DealID, proposal.StartEpoch, height)
+		}
+	}
+
+	return toFix, paddingPieces, nil
+}
+
+// func (m *Sealing) handleReplicaUpdateFailed(ctx statemachine.Context, sector SectorInfo) error {
+// 	if err := failedCooldown(ctx, sector); err != nil {
+// 		return err
+// 	}
+
+// 	return ctx.Send(SectorRetryReplicaUpdate{})
+// }
+
+// func (m *Sealing) handleProveReplicaUpdate1Failed(ctx statemachine.Context, sector SectorInfo) error {
+// 	if err := failedCooldown(ctx, sector); err != nil {
+// 		return err
+// 	}
+
+// 	return ctx.Send(SectorRetryProveReplicaUpdate1{})
+// }
+
+// func (m *Sealing) handleProveReplicaUpdate2Failed(ctx statemachine.Context, sector SectorInfo) error {
+// 	if err := failedCooldown(ctx, sector); err != nil {
+// 		return err
+// 	}
+
+// 	return ctx.Send(SectorRetryProveReplicaUpdate2{})
+// }

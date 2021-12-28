@@ -19,7 +19,7 @@ func (m *Sealing) handleReplicaUpdate(ctx statemachine.Context, sector SectorInf
 			return nil
 		case *ErrInvalidDeals:
 			log.Warnf("invalid deals in sector %d: %v", sector.SectorNumber, err)
-			return ctx.Send(SectorInvalidDealIDs{Return: RetPreCommit1})
+			return ctx.Send(SectorInvalidDealIDs{})
 		case *ErrExpiredDeals: // Probably not much we can do here, maybe re-pack the sector?
 			return ctx.Send(SectorDealsExpired{xerrors.Errorf("expired dealIDs in sector: %w", err)})
 		default:
@@ -36,7 +36,6 @@ func (m *Sealing) handleReplicaUpdate(ctx statemachine.Context, sector SectorInf
 }
 
 func (m *Sealing) handleProveReplicaUpdate1(ctx statemachine.Context, sector SectorInfo) error {
-	// XXX check pieces
 	if sector.UpdateSealed == nil || sector.UpdateUnsealed == nil {
 		return xerrors.Errorf("invalid sector %d with nil UpdateSealed or UpdateUnsealed output", sector.SectorNumber)
 	}
@@ -53,7 +52,6 @@ func (m *Sealing) handleProveReplicaUpdate1(ctx statemachine.Context, sector Sec
 }
 
 func (m *Sealing) handleProveReplicaUpdate2(ctx statemachine.Context, sector SectorInfo) error {
-	// XXX check pieces
 	if sector.UpdateSealed == nil || sector.UpdateUnsealed == nil {
 		return xerrors.Errorf("invalid sector %d with nil UpdateSealed or UpdateUnsealed output", sector.SectorNumber)
 	}
@@ -75,19 +73,21 @@ func (m *Sealing) handleProveReplicaUpdate2(ctx statemachine.Context, sector Sec
 
 func (m *Sealing) handleSubmitReplicaUpdate(ctx statemachine.Context, sector SectorInfo) error {
 
-	// XXX use config for various collateral things
-
-	// cfg, err := m.getConfig()
-	// if err != nil {
-	// 	return xerrors.Errorf("getting config: %w", err)
-	// }
 	tok, _, err := m.Api.ChainHead(ctx.Context())
 	if err != nil {
 		log.Errorf("handleSubmitReplicaUpdate: api error, not proceeding: %+v", err)
 		return nil
 	}
 
-	// XXX: check replica update
+	if err := checkReplicaUpdate(ctx.Context(), m.maddr, sector, tok, m.Api); err != nil {
+		return ctx.Send(SectorSubmitReplicaUpdateFailed{})
+	}
+	// XXX use config for various collateral things
+
+	// cfg, err := m.getConfig()
+	// if err != nil {
+	// 	return xerrors.Errorf("getting config: %w", err)
+	// }
 
 	sl, err := m.Api.StateSectorPartition(ctx.Context(), m.maddr, sector.SectorNumber, tok)
 	if err != nil {
@@ -96,7 +96,8 @@ func (m *Sealing) handleSubmitReplicaUpdate(ctx statemachine.Context, sector Sec
 	}
 	updateProof, err := sector.SectorType.RegisteredUpdateProof()
 	if err != nil {
-		return xerrors.Errorf("failed to get update proof type from seal proof: %w", err)
+		log.Errorf("failed to get update proof type from seal proof: %+v", err)
+		return ctx.Send(SectorSubmitReplicaUpdateFailed{})
 	}
 	enc := new(bytes.Buffer)
 	params := &miner.ProveReplicaUpdatesParams{
@@ -113,7 +114,8 @@ func (m *Sealing) handleSubmitReplicaUpdate(ctx statemachine.Context, sector Sec
 		},
 	}
 	if err := params.MarshalCBOR(enc); err != nil {
-		return xerrors.Errorf("failed to serialize update replica params: %w", err)
+		log.Errorf("failed to serialize update replica params: %w", err)
+		return ctx.Send(SectorSubmitReplicaUpdateFailed{})
 	}
 
 	// XXX fees need to be better handled
@@ -125,10 +127,15 @@ func (m *Sealing) handleSubmitReplicaUpdate(ctx statemachine.Context, sector Sec
 
 	from, _, err := m.addrSel(ctx.Context(), mi, api.CommitAddr, big.Zero(), big.Zero())
 	if err != nil {
-		return xerrors.Errorf("no good address to send replica update message from: %w", err)
+		log.Errorf("no good address to send replica update message from: %+v", err)
+		return ctx.Send(SectorSubmitReplicaUpdateFailed{})
 	}
 	// XXX fees need to be better handled
 	mcid, err := m.Api.SendMsg(ctx.Context(), from, m.maddr, miner.Methods.ProveReplicaUpdates, big.Zero(), big.Int(m.feeCfg.MaxCommitGasFee), enc.Bytes())
+	if err != nil {
+		log.Errorf("handleSubmitReplicaUpdate: error sending message: %+v", err)
+		return ctx.Send(SectorSubmitReplicaUpdateFailed{})
+	}
 
 	return ctx.Send(SectorReplicaUpdateSubmitted{Message: mcid})
 }
@@ -140,7 +147,8 @@ func (m *Sealing) handleReplicaUpdateWait(ctx statemachine.Context, sector Secto
 
 	mw, err := m.Api.StateWaitMsg(ctx.Context(), *sector.ReplicaUpdateMessage)
 	if err != nil {
-		panic("deal with failures")
+		log.Errorf("handleReplicaUpdateWait: failed to wait for message: %+v", err)
+		return ctx.Send(SectorSubmitReplicaUpdateFailed{})
 	}
 
 	switch mw.Receipt.ExitCode {
@@ -149,22 +157,24 @@ func (m *Sealing) handleReplicaUpdateWait(ctx statemachine.Context, sector Secto
 	case exitcode.SysErrInsufficientFunds:
 		fallthrough
 	case exitcode.SysErrOutOfGas:
-		// gas estimator was wrong or out of funds
-		panic("should do a retry")
+		log.Errorf("gas estimator was wrong or out of funds")
+		return ctx.Send(SectorSubmitReplicaUpdateFailed{})
 	default:
-		panic("unrecovereable failure")
+		return ctx.Send(SectorSubmitReplicaUpdateFailed{})
 	}
 	si, err := m.Api.StateSectorGetInfo(ctx.Context(), m.maddr, sector.SectorNumber, mw.TipSetTok)
 	if err != nil {
-		panic("error getting sector info")
+		log.Errorf("api err failed to get sector info: %+v", err)
+		return ctx.Send(SectorSubmitReplicaUpdateFailed{})
 	}
 	if si == nil {
-		panic("failure doing replica update, sector no longe exists")
+		log.Errorf("api err sector not found")
+		return ctx.Send(SectorSubmitReplicaUpdateFailed{})
 	}
 
 	if !si.SealedCID.Equals(*sector.UpdateSealed) {
 		log.Errorf("mismatch of expected onchain sealed cid after replica update, expected %s got %s", sector.UpdateSealed, si.SealedCID)
-		panic("fail here")
+		return ctx.Send(SectorAbortUpgrade{})
 	}
 	return ctx.Send(SectorReplicaUpdateLanded{})
 }

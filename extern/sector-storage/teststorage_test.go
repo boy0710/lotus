@@ -59,6 +59,14 @@ func (t *testExec) ReleaseSealed(ctx context.Context, sector storage.SectorRef) 
 	panic("implement me")
 }
 
+func (t *testExec) ReleaseSectorKey(ctx context.Context, sector storage.SectorRef) error {
+	panic("implement me")
+}
+
+func (t *testExec) ReleaseReplicaUpgrade(ctx context.Context, sector storage.SectorRef) error {
+	panic("implement me")
+}
+
 func (t *testExec) Remove(ctx context.Context, sector storage.SectorRef) error {
 	panic("implement me")
 }

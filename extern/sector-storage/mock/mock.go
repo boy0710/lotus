@@ -482,6 +482,14 @@ func (mgr *SectorMgr) ReleaseUnsealed(ctx context.Context, sector storage.Sector
 	return nil
 }
 
+func (mgr *SectorMgr) ReleaseReplicaUpgrade(ctx context.Context, sector storage.SectorRef) error {
+	return nil
+}
+
+func (mgr *SectorMgr) ReleaseSectorKey(ctx context.Context, sector storage.SectorRef) error {
+	return nil
+}
+
 func (mgr *SectorMgr) Remove(ctx context.Context, sector storage.SectorRef) error {
 	mgr.lk.Lock()
 	defer mgr.lk.Unlock()

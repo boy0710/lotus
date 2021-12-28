@@ -596,6 +596,23 @@ func (m *Manager) ReleaseSectorKey(ctx context.Context, sector storage.SectorRef
 	return m.storage.Remove(ctx, sector.ID, storiface.FTSealed, true, nil)
 }
 
+func (m *Manager) ReleaseReplicaUpgrade(ctx context.Context, sector storage.SectorRef) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	if err := m.index.StorageLock(ctx, sector.ID, storiface.FTNone, storiface.FTUpdateCache|storiface.FTUpdate); err != nil {
+		return xerrors.Errorf("acquiring sector lock: %w", err)
+	}
+
+	if err := m.storage.Remove(ctx, sector.ID, storiface.FTUpdateCache, true, nil); err != nil {
+		return xerrors.Errorf("removing update cache: %w", err)
+	}
+	if err := m.storage.Remove(ctx, sector.ID, storiface.FTUpdate, true, nil); err != nil {
+		return xerrors.Errorf("removing update: %w", err)
+	}
+	return nil
+}
+
 func (m *Manager) GenerateSectorKeyFromData(ctx context.Context, sector storage.SectorRef, commD cid.Cid) error {
 
 	ctx, cancel := context.WithCancel(ctx)
