@@ -335,7 +335,7 @@ func AddOpFinish(ctx context.Context) (context.Context, func()) {
 	}
 }
 
-func (mgr *SectorMgr) GenerateWinningPoSt(ctx context.Context, minerID abi.ActorID, xSectorInfo []proof.ExtendedSectorInfo, randomness abi.PoStRandomness, currEpoch abi.ChainEpoch, nv network.Version) ([]proof.PoStProof, error) {
+func (mgr *SectorMgr) GenerateWinningPoSt(ctx context.Context, minerID abi.ActorID, xSectorInfo []proof.ExtendedSectorInfo, randomness abi.PoStRandomness) ([]proof.PoStProof, error) {
 	mgr.lk.Lock()
 	defer mgr.lk.Unlock()
 

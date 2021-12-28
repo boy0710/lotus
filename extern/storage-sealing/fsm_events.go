@@ -302,7 +302,8 @@ type SectorStartCCUpdate struct{}
 
 func (evt SectorStartCCUpdate) apply(state *SectorInfo) {
 	state.CCUpdate = true
-	// Remove filler piece
+	// Clear filler piece but remember in case of abort
+	state.CCPieces = state.Pieces
 	state.Pieces = nil
 }
 
@@ -398,6 +399,60 @@ func (evt SectorUpdateDealIDs) apply(state *SectorInfo) {
 	for i, id := range evt.Updates {
 		state.Pieces[i].DealInfo.DealID = id
 	}
+}
+
+// Snap Deals failure and recovery
+
+type SectorRetryReplicaUpdate struct{}
+
+func (evt SectorRetryReplicaUpdate) apply(state *SectorInfo) {}
+
+type SectorRetryProveReplicaUpdate1 struct{}
+
+func (evt SectorRetryProveReplicaUpdate1) apply(state *SectorInfo) {}
+
+type SectorRetryProveReplicaUpdate2 struct{}
+
+func (evt SectorRetryProveReplicaUpdate2) apply(state *SectorInfo) {}
+
+type SectorUpdateReplicaFailed struct{ error }
+
+func (evt SectorUpdateReplicaFailed) FormatError(xerrors.Printer) (next error) { return evt.error }
+func (evt SectorUpdateReplicaFailed) apply(state *SectorInfo)                  {}
+
+type SectorProveReplicaUpdate1Failed struct{ error }
+
+func (evt SectorProveReplicaUpdate1Failed) FormatError(xerrors.Printer) (next error) {
+	return evt.error
+}
+func (evt SectorProveReplicaUpdate1Failed) apply(state *SectorInfo) {}
+
+type SectorProveReplicaUpdate2Failed struct{ error }
+
+func (evt SectorProveReplicaUpdate2Failed) FormatError(xerrors.Printer) (next error) {
+	return evt.error
+}
+func (evt SectorProveReplicaUpdate2Failed) apply(state *SectorInfo) {}
+
+type SectorAbortUpgrade struct{ error }
+
+func (evt SectorAbortUpgrade) apply(state *SectorInfo) {}
+func (evt SectorAbortUpgrade) FormatError(xerrors.Printer) (next error) {
+	return evt.error
+}
+
+type SectorRevertUpgradeToProving struct{}
+
+func (evt SectorRevertUpgradeToProving) apply(state *SectorInfo) {
+	// cleanup sector state so that it is back in proving
+	state.CCUpdate = false
+	state.UpdateSealed = nil
+	state.UpdateUnsealed = nil
+	state.ProveReplicaUpdate1Out = nil
+	state.ReplicaUpdateProof = nil
+	state.ReplicaUpdateMessage = nil
+	state.Pieces = state.CCPieces
+	state.CCPieces = nil
 }
 
 // Faults

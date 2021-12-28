@@ -12,6 +12,7 @@ import (
 	"time"
 
 	saproof2 "github.com/filecoin-project/specs-actors/v2/actors/runtime/proof"
+	"github.com/filecoin-project/specs-actors/v7/actors/runtime/proof"
 	saproof7 "github.com/filecoin-project/specs-actors/v7/actors/runtime/proof"
 
 	"github.com/docker/go-units"
@@ -262,6 +263,7 @@ var sealBenchCmd = &cli.Command{
 
 		var sealTimings []SealingResult
 		var extendedSealedSectors []saproof7.ExtendedSectorInfo
+		var sealedSectors []saproof7.SectorInfo
 
 		if robench == "" {
 			var err error
@@ -302,7 +304,11 @@ var sealBenchCmd = &cli.Command{
 					SectorNumber: s.SectorID,
 					SealProof:    s.ProofType,
 					SectorKey:    nil,
-					Activation:   0,
+				})
+				sealedSectors = append(sealedSectors, proof.SectorInfo{
+					SealedCID:    s.CommR,
+					SectorNumber: s.SectorID,
+					SealProof:    s.ProofType,
 				})
 			}
 		}
@@ -333,15 +339,15 @@ var sealBenchCmd = &cli.Command{
 				return err
 			}
 
-			candidates := make([]saproof7.ExtendedSectorInfo, len(fcandidates))
+			xcandidates := make([]saproof7.ExtendedSectorInfo, len(fcandidates))
 			for i, fcandidate := range fcandidates {
-				candidates[i] = extendedSealedSectors[fcandidate]
+				xcandidates[i] = extendedSealedSectors[fcandidate]
 			}
 
 			gencandidates := time.Now()
 
 			log.Info("computing winning post snark (cold)")
-			proof1, err := sb.GenerateWinningPoSt(context.TODO(), mid, candidates, challenge[:], 0, build.NewestNetworkVersion)
+			proof1, err := sb.GenerateWinningPoSt(context.TODO(), mid, xcandidates, challenge[:])
 			if err != nil {
 				return err
 			}
@@ -349,9 +355,18 @@ var sealBenchCmd = &cli.Command{
 			winningpost1 := time.Now()
 
 			log.Info("computing winning post snark (hot)")
-			proof2, err := sb.GenerateWinningPoSt(context.TODO(), mid, candidates, challenge[:], 0, build.NewestNetworkVersion)
+			proof2, err := sb.GenerateWinningPoSt(context.TODO(), mid, xcandidates, challenge[:])
 			if err != nil {
 				return err
+			}
+
+			candidates := make([]saproof7.SectorInfo, len(xcandidates))
+			for i, xsi := range xcandidates {
+				candidates[i] = saproof7.SectorInfo{
+					SealedCID:    xsi.SealedCID,
+					SectorNumber: xsi.SectorNumber,
+					SealProof:    xsi.SealProof,
+				}
 			}
 
 			winnningpost2 := time.Now()
@@ -387,15 +402,6 @@ var sealBenchCmd = &cli.Command{
 				log.Error("post verification failed")
 			}
 			verifyWinningPost2 := time.Now()
-
-			sealedSectors := make([]saproof7.SectorInfo, len(extendedSealedSectors))
-			for i, xssi := range extendedSealedSectors {
-				sealedSectors[i] = saproof7.SectorInfo{
-					SealProof:    xssi.SealProof,
-					SectorNumber: xssi.SectorNumber,
-					SealedCID:    xssi.SealedCID,
-				}
-			}
 
 			log.Info("computing window post snark (cold)")
 			wproof1, _, err := sb.GenerateWindowPoSt(context.TODO(), mid, extendedSealedSectors, challenge[:])
@@ -596,7 +602,6 @@ func runSeals(sb *ffiwrapper.Sealer, sbfs *basicfs.Provider, numSectors int, par
 						SectorNumber: i,
 						SealedCID:    cids.Sealed,
 						SectorKey:    nil,
-						Activation:   0,
 					}
 
 					seed := lapi.SealSeed{

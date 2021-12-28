@@ -1529,7 +1529,21 @@ var sectorsMarkForUpgradeCmd = &cli.Command{
 			return err
 		}
 		defer closer()
+
+		api, nCloser, err := lcli.GetFullNodeAPI(cctx)
+		if err != nil {
+			return err
+		}
+		defer nCloser()
 		ctx := lcli.ReqContext(cctx)
+
+		nv, err := api.StateNetworkVersion(ctx, types.EmptyTSK)
+		if err != nil {
+			return xerrors.Errorf("failed to get network version: %w", err)
+		}
+		if nv >= network.Version15 {
+			return xerrors.Errorf("classic cc upgrades disabled v15 and beyond, use `snap-up`")
+		}
 
 		id, err := strconv.ParseUint(cctx.Args().Get(0), 10, 64)
 		if err != nil {

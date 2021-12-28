@@ -814,7 +814,6 @@ func (s *WindowPoStScheduler) sectorsForProof(ctx context.Context, goodSectors, 
 		SealedCID:    sset[0].SealedCID,
 		SealProof:    sset[0].SealProof,
 		SectorKey:    sset[0].SectorKeyCID,
-		Activation:   sset[0].Activation,
 	}
 
 	sectorByID := make(map[uint64]proof7.ExtendedSectorInfo, len(sset))
@@ -824,7 +823,6 @@ func (s *WindowPoStScheduler) sectorsForProof(ctx context.Context, goodSectors, 
 			SealedCID:    sector.SealedCID,
 			SealProof:    sector.SealProof,
 			SectorKey:    sector.SectorKeyCID,
-			Activation:   sector.Activation,
 		}
 	}
 

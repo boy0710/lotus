@@ -291,7 +291,7 @@ func (wpp *StorageWpp) ComputeProof(ctx context.Context, ssi []builtin.ExtendedS
 	log.Infof("Computing WinningPoSt ;%+v; %v", ssi, rand)
 
 	start := build.Clock.Now()
-	proof, err := wpp.prover.GenerateWinningPoSt(ctx, wpp.miner, ssi, rand, currEpoch, nv)
+	proof, err := wpp.prover.GenerateWinningPoSt(ctx, wpp.miner, ssi, rand)
 	if err != nil {
 		return nil, err
 	}

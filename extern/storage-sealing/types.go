@@ -93,6 +93,7 @@ type SectorInfo struct {
 
 	// CCUpdate
 	CCUpdate               bool
+	CCPieces               []Piece
 	UpdateSealed           *cid.Cid
 	UpdateUnsealed         *cid.Cid
 	ProveReplicaUpdate1Out storage.ReplicaVanillaProofs

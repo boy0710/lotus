@@ -15,27 +15,13 @@ import (
 	ffiproof "github.com/filecoin-project/specs-actors/v5/actors/runtime/proof"
 	"github.com/filecoin-project/specs-actors/v7/actors/runtime/proof"
 	"github.com/filecoin-project/specs-storage/storage"
-	"github.com/ipfs/go-cid"
 
-	"github.com/filecoin-project/lotus/chain/actors/policy"
 	"github.com/filecoin-project/lotus/extern/sector-storage/storiface"
 )
 
-func (sb *Sealer) GenerateWinningPoSt(ctx context.Context, minerID abi.ActorID, sectorInfo []proof.ExtendedSectorInfo, randomness abi.PoStRandomness, poStEpoch abi.ChainEpoch, version network.Version) ([]proof.PoStProof, error) {
+func (sb *Sealer) GenerateWinningPoSt(ctx context.Context, minerID abi.ActorID, sectorInfo []proof.ExtendedSectorInfo, randomness abi.PoStRandomness) ([]proof.PoStProof, error) {
 	randomness[31] &= 0x3f
-	takeSectorKey := func(ssi proof.ExtendedSectorInfo) cid.Cid {
-		// no update
-		if ssi.SectorKey == nil {
-			return ssi.SealedCID
-		}
-		lb := policy.GetWinningPoStSectorSetLookback(version)
-		// update not yet in lookback state
-		if ssi.Activation+lb > poStEpoch {
-			return *ssi.SectorKey
-		}
-		return ssi.SealedCID
-	}
-	privsectors, skipped, done, err := sb.pubExtendedSectorToPriv(ctx, minerID, sectorInfo, nil, abi.RegisteredSealProof.RegisteredWinningPoStProof, takeSectorKey) // TODO: FAULTS?
+	privsectors, skipped, done, err := sb.pubExtendedSectorToPriv(ctx, minerID, sectorInfo, nil, abi.RegisteredSealProof.RegisteredWinningPoStProof) // TODO: FAULTS?
 	if err != nil {
 		return nil, err
 	}
@@ -48,12 +34,8 @@ func (sb *Sealer) GenerateWinningPoSt(ctx context.Context, minerID abi.ActorID, 
 }
 
 func (sb *Sealer) GenerateWindowPoSt(ctx context.Context, minerID abi.ActorID, sectorInfo []proof.ExtendedSectorInfo, randomness abi.PoStRandomness) ([]proof.PoStProof, []abi.SectorID, error) {
-	log.Errorf("Generate Window PoST cgo sealer!")
 	randomness[31] &= 0x3f
-	takeSealed := func(ssi proof.ExtendedSectorInfo) cid.Cid {
-		return ssi.SealedCID
-	}
-	privsectors, skipped, done, err := sb.pubExtendedSectorToPriv(ctx, minerID, sectorInfo, nil, abi.RegisteredSealProof.RegisteredWindowPoStProof, takeSealed)
+	privsectors, skipped, done, err := sb.pubExtendedSectorToPriv(ctx, minerID, sectorInfo, nil, abi.RegisteredSealProof.RegisteredWindowPoStProof)
 	if err != nil {
 		return nil, nil, xerrors.Errorf("gathering sector info: %w", err)
 	}
@@ -79,7 +61,7 @@ func (sb *Sealer) GenerateWindowPoSt(ctx context.Context, minerID abi.ActorID, s
 	return proof, faultyIDs, err
 }
 
-func (sb *Sealer) pubExtendedSectorToPriv(ctx context.Context, mid abi.ActorID, sectorInfo []proof.ExtendedSectorInfo, faults []abi.SectorNumber, rpt func(abi.RegisteredSealProof) (abi.RegisteredPoStProof, error), proofCID func(proof.ExtendedSectorInfo) cid.Cid) (ffi.SortedPrivateSectorInfo, []abi.SectorID, func(), error) {
+func (sb *Sealer) pubExtendedSectorToPriv(ctx context.Context, mid abi.ActorID, sectorInfo []proof.ExtendedSectorInfo, faults []abi.SectorNumber, rpt func(abi.RegisteredSealProof) (abi.RegisteredPoStProof, error)) (ffi.SortedPrivateSectorInfo, []abi.SectorID, func(), error) {
 	fmap := map[abi.SectorNumber]struct{}{}
 	for _, fault := range faults {
 		fmap[fault] = struct{}{}
@@ -103,7 +85,7 @@ func (sb *Sealer) pubExtendedSectorToPriv(ctx context.Context, mid abi.ActorID, 
 			ID:        abi.SectorID{Miner: mid, Number: s.SectorNumber},
 			ProofType: s.SealProof,
 		}
-		proveUpdate := s.SectorKey != nil && proofCID(s) == s.SealedCID
+		proveUpdate := s.SectorKey != nil
 		var cache string
 		var sealed string
 		if proveUpdate {
@@ -139,7 +121,7 @@ func (sb *Sealer) pubExtendedSectorToPriv(ctx context.Context, mid abi.ActorID, 
 		ffiInfo := ffiproof.SectorInfo{
 			SealProof:    s.SealProof,
 			SectorNumber: s.SectorNumber,
-			SealedCID:    proofCID(s),
+			SealedCID:    s.SealedCID,
 		}
 		out = append(out, ffi.PrivateSectorInfo{
 			CacheDirPath:     cache,
@@ -180,7 +162,7 @@ func (proofVerifier) VerifyWinningPoSt(ctx context.Context, info proof.WinningPo
 		Randomness:        info.Randomness,
 		Proofs:            info.Proofs,
 		Prover:            info.Prover,
-		ChallengedSectors: ffiSectorInfosTakeSectorKeyUntilCutoff(info.ChallengedSectors, poStEpoch, policy.GetWinningPoStSectorSetLookback(version)),
+		ChallengedSectors: info.ChallengedSectors,
 	}
 
 	return ffi.VerifyWinningPoSt(ffiInfo)
@@ -197,25 +179,4 @@ func (proofVerifier) VerifyWindowPoSt(ctx context.Context, info proof.WindowPoSt
 func (proofVerifier) GenerateWinningPoStSectorChallenge(ctx context.Context, proofType abi.RegisteredPoStProof, minerID abi.ActorID, randomness abi.PoStRandomness, eligibleSectorCount uint64) ([]uint64, error) {
 	randomness[31] &= 0x3f
 	return ffi.GenerateWinningPoStSectorChallenge(proofType, minerID, randomness, eligibleSectorCount)
-}
-
-// For non-upgraded sectors take the sealed cid
-// For upgraded sectors take the sector key as sealed cid until
-//   sector activation + cutoff is in the past, i.e. less than current epoch
-func ffiSectorInfosTakeSectorKeyUntilCutoff(infos []proof.ExtendedSectorInfo, current, cutoff abi.ChainEpoch) []ffiproof.SectorInfo {
-	ffiInfos := make([]ffiproof.SectorInfo, len(infos))
-	for i, ssi := range infos {
-		sealed := ssi.SealedCID
-		// lookback state is at current - cutoff. Once this is activation or greater lookback state includes upgrade
-		if ssi.SectorKey != nil && cutoff+ssi.Activation > current {
-			sealed = *ssi.SectorKey
-		}
-
-		ffiInfos[i] = ffiproof.SectorInfo{
-			SealProof:    ssi.SealProof,
-			SectorNumber: ssi.SectorNumber,
-			SealedCID:    sealed,
-		}
-	}
-	return ffiInfos
 }

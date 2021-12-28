@@ -319,6 +319,23 @@ func (m *Sealing) handleDealsExpired(ctx statemachine.Context, sector SectorInfo
 	return ctx.Send(SectorRemove{})
 }
 
+func (m *Sealing) handleDealsExpiredSnapDeals(ctx statemachine.Context, sector SectorInfo) error {
+	if !sector.CCUpdate {
+		// Should be impossible
+		return xerrors.Errorf("should never reach SnapDealsDealsExpired as a non-CCUpdate sector")
+	}
+
+	return ctx.Send(SectorAbortUpgrade{xerrors.Errorf("one of upgrade deals expired")})
+}
+
+func (m *Sealing) handleAbortUpgrade(ctx statemachine.Context, sector SectorInfo) error {
+	if !sector.CCUpdate {
+		return xerrors.Errorf("should never reach AbortUpgrade as a non-CCUpdate sector")
+	}
+
+	// Remove snap deals replica if any
+}
+
 func (m *Sealing) HandleRecoverDealIDs(ctx Context, sector SectorInfo) error {
 	tok, height, err := m.Api.ChainHead(ctx.Context())
 	if err != nil {
@@ -429,4 +446,28 @@ func (m *Sealing) HandleRecoverDealIDs(ctx Context, sector SectorInfo) error {
 
 	// Not much to do here, we can't go back in time to commit this sector
 	return ctx.Send(SectorUpdateDealIDs{Updates: updates})
+}
+
+func (m *Sealing) handleReplicaUpdateFailed(ctx statemachine.Context, sector SectorInfo) error {
+	if err := failedCooldown(ctx, sector); err != nil {
+		return err
+	}
+
+	return ctx.Send(SectorRetryReplicaUpdate{})
+}
+
+func (m *Sealing) handleProveReplicaUpdate1Failed(ctx statemachine.Context, sector SectorInfo) error {
+	if err := failedCooldown(ctx, sector); err != nil {
+		return err
+	}
+
+	return ctx.Send(SectorRetryProveReplicaUpdate1{})
+}
+
+func (m *Sealing) handleProveReplicaUpdate2Failed(ctx statemachine.Context, sector SectorInfo) error {
+	if err := failedCooldown(ctx, sector); err != nil {
+		return err
+	}
+
+	return ctx.Send(SectorRetryProveReplicaUpdate2{})
 }

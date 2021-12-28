@@ -142,18 +142,28 @@ var fsmPlanners = map[SectorState]func(events []statemachine.Event, state *Secto
 		on(SectorPieceAdded{}, SnapDealsWaitDeals),
 		apply(SectorStartPacking{}),
 		apply(SectorAddPiece{}),
+		on(SectorAddPieceFailed{}, SnapDealsAddPieceFailed),
 	),
 	SnapDealsPacking: planOne(
 		on(SectorPacked{}, UpdateReplica),
 	),
 	UpdateReplica: planOne(
 		on(SectorReplicaUpdate{}, ProveReplicaUpdate1),
+		on(SectorUpdateReplicaFailed{}, UpdateReplicaFailed),
+		on(SectorDealsExpired{}, SnapDealsDealsExpired),
+		on(SectorInvalidDealIDs{}, SnapDealsRecoverDealIDs),
 	),
 	ProveReplicaUpdate1: planOne(
 		on(SectorProveReplicaUpdate1{}, ProveReplicaUpdate2),
+		on(SectorProveReplicaUpdate1Failed{}, ProveReplicaUpdate1Failed),
+		on(SectorDealsExpired{}, SnapDealsDealsExpired),
+		on(SectorInvalidDealIDs{}, SnapDealsRecoverDealIDs),
 	),
 	ProveReplicaUpdate2: planOne(
 		on(SectorProveReplicaUpdate2{}, SubmitReplicaUpdate),
+		on(SectorProveReplicaUpdate2Failed{}, ProveReplicaUpdate2Failed),
+		on(SectorDealsExpired{}, SnapDealsDealsExpired),
+		on(SectorInvalidDealIDs{}, SnapDealsRecoverDealIDs),
 	),
 	SubmitReplicaUpdate: planOne(
 		on(SectorReplicaUpdateSubmitted{}, ReplicaUpdateWait),
@@ -217,6 +227,22 @@ var fsmPlanners = map[SectorState]func(events []statemachine.Event, state *Secto
 	),
 	RecoverDealIDs: planOne(
 		onReturning(SectorUpdateDealIDs{}),
+	),
+
+	// Snap Deals Errors
+	SnapDealsAddPieceFailed: planOne(
+		on(SectorRetryWaitDeals{}, SnapDealsWaitDeals),
+		apply(SectorStartPacking{}),
+		apply(SectorAddPiece{}),
+	),
+	UpdateReplicaFailed: planOne(
+		on(SectorRetryReplicaUpdate{}, UpdateReplica),
+	),
+	ProveReplicaUpdate1Failed: planOne(
+		on(SectorRetryProveReplicaUpdate1{}, ProveReplicaUpdate1),
+	),
+	ProveReplicaUpdate2Failed: planOne(
+		on(SectorRetryProveReplicaUpdate2{}, ProveReplicaUpdate2),
 	),
 
 	// Post-seal
@@ -479,6 +505,20 @@ func (m *Sealing) plan(events []statemachine.Event, state *SectorInfo) (func(sta
 		return m.handleDealsExpired, processed, nil
 	case RecoverDealIDs:
 		return wrapCtx(m.HandleRecoverDealIDs), processed, nil
+
+	// Snap Deals failure modes
+	case SnapDealsAddPieceFailed:
+		return m.handleAddPieceFailed, processed, nil
+	case UpdateReplicaFailed:
+		return m.handleReplicaUpdateFailed, processed, nil
+	case SnapDealsDealsExpired:
+		//XXX
+	case SnapDealsRecoverDealIDs:
+		//XXX
+	case ProveReplicaUpdate1Failed:
+		return m.handleProveReplicaUpdate1Failed, processed, nil
+	case ProveReplicaUpdate2Failed:
+		return m.handleProveReplicaUpdate2Failed, processed, nil
 
 	// Post-seal
 	case Proving:

@@ -210,7 +210,6 @@ func GetSectorsForWinningPoSt(ctx context.Context, nv network.Version, pv ffiwra
 			SectorNumber: sinfo.SectorNumber,
 			SealedCID:    sinfo.SealedCID,
 			SectorKey:    sinfo.SectorKeyCID,
-			Activation:   sinfo.Activation,
 		}
 	}
 
