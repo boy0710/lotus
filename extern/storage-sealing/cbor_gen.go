@@ -143,7 +143,7 @@ func (t *SectorInfo) MarshalCBOR(w io.Writer) error {
 		_, err := w.Write(cbg.CborNull)
 		return err
 	}
-	if _, err := w.Write([]byte{184, 32}); err != nil {
+	if _, err := w.Write([]byte{184, 33}); err != nil {
 		return err
 	}
 
@@ -587,6 +587,31 @@ func (t *SectorInfo) MarshalCBOR(w io.Writer) error {
 
 	if err := cbg.WriteBool(w, t.CCUpdate); err != nil {
 		return err
+	}
+
+	// t.CCPieces ([]sealing.Piece) (slice)
+	if len("CCPieces") > cbg.MaxLength {
+		return xerrors.Errorf("Value in field \"CCPieces\" was too long")
+	}
+
+	if err := cbg.WriteMajorTypeHeaderBuf(scratch, w, cbg.MajTextString, uint64(len("CCPieces"))); err != nil {
+		return err
+	}
+	if _, err := io.WriteString(w, string("CCPieces")); err != nil {
+		return err
+	}
+
+	if len(t.CCPieces) > cbg.MaxLength {
+		return xerrors.Errorf("Slice value in field t.CCPieces was too long")
+	}
+
+	if err := cbg.WriteMajorTypeHeaderBuf(scratch, w, cbg.MajArray, uint64(len(t.CCPieces))); err != nil {
+		return err
+	}
+	for _, v := range t.CCPieces {
+		if err := v.MarshalCBOR(w); err != nil {
+			return err
+		}
 	}
 
 	// t.UpdateSealed (cid.Cid) (struct)
@@ -1324,6 +1349,36 @@ func (t *SectorInfo) UnmarshalCBOR(r io.Reader) error {
 			default:
 				return fmt.Errorf("booleans are either major type 7, value 20 or 21 (got %d)", extra)
 			}
+			// t.CCPieces ([]sealing.Piece) (slice)
+		case "CCPieces":
+
+			maj, extra, err = cbg.CborReadHeaderBuf(br, scratch)
+			if err != nil {
+				return err
+			}
+
+			if extra > cbg.MaxLength {
+				return fmt.Errorf("t.CCPieces: array too large (%d)", extra)
+			}
+
+			if maj != cbg.MajArray {
+				return fmt.Errorf("expected cbor array")
+			}
+
+			if extra > 0 {
+				t.CCPieces = make([]Piece, extra)
+			}
+
+			for i := 0; i < int(extra); i++ {
+
+				var v Piece
+				if err := v.UnmarshalCBOR(br); err != nil {
+					return err
+				}
+
+				t.CCPieces[i] = v
+			}
+
 			// t.UpdateSealed (cid.Cid) (struct)
 		case "UpdateSealed":
 
