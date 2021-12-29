@@ -48,7 +48,7 @@ func runTestCCUpgrade(t *testing.T, upgradeHeight abi.ChainEpoch) *kit.TestFullN
 
 	// wait for deadline 0 to pass so that committing starts after post on preseals
 	// this gives max time for post to complete minimizing chances of timeout
-	waitForDeadline(t, ctx, 1, client, maddr)
+	waitForDeadline(ctx, t, 1, client, maddr)
 	miner.PledgeSectors(ctx, 1, 0, nil)
 
 	sl, err := miner.SectorsList(ctx)
@@ -83,7 +83,7 @@ func runTestCCUpgrade(t *testing.T, upgradeHeight abi.ChainEpoch) *kit.TestFullN
 	return client
 }
 
-func waitForDeadline(t *testing.T, ctx context.Context, waitIdx uint64, node *kit.TestFullNode, maddr address.Address) {
+func waitForDeadline(ctx context.Context, t *testing.T, waitIdx uint64, node *kit.TestFullNode, maddr address.Address) {
 	for {
 		ts, err := node.ChainHead(ctx)
 		require.NoError(t, err)
@@ -104,11 +104,6 @@ func waitForSectorActive(t *testing.T, ctx context.Context, sn abi.SectorNumber,
 				fmt.Printf("ACTIVE\n")
 				return
 			}
-		}
-		sectors, _ := node.StateMinerSectors(ctx, maddr, nil, types.EmptyTSK)
-		nos := make([]uint64, 0)
-		for _, s := range sectors {
-			nos = append(nos, uint64(s.SectorNumber))
 		}
 
 		time.Sleep(time.Second)

@@ -288,18 +288,18 @@ func dealSectorInReplicaUpdateSuccess(msg *types.Message, rec *types.MessageRece
 		return nil, xerrors.Errorf("unmarshal prove replica update: %w", err)
 	}
 
-	var seekUpdate *miner.ReplicaUpdate
-	var updateSectorNo abi.SectorNumber
+	var seekUpdate miner.ReplicaUpdate
+	var found bool
 	for _, update := range params.Updates {
 		for _, did := range update.Deals {
 			if did == res.DealID {
-				seekUpdate = &update
-				updateSectorNo = update.SectorID
+				seekUpdate = update
+				found = true
 				break
 			}
 		}
 	}
-	if seekUpdate == nil {
+	if !found {
 		return nil, nil
 	}
 
@@ -308,12 +308,12 @@ func dealSectorInReplicaUpdateSuccess(msg *types.Message, rec *types.MessageRece
 	if err := successBf.UnmarshalCBOR(bytes.NewReader(rec.Return)); err != nil {
 		return nil, xerrors.Errorf("unmarshal return value: %w", err)
 	}
-	success, err := successBf.IsSet(uint64(updateSectorNo))
+	success, err := successBf.IsSet(uint64(seekUpdate.SectorID))
 	if err != nil {
 		return nil, xerrors.Errorf("failed to check success of replica update: %w", err)
 	}
 	if !success {
-		return nil, xerrors.Errorf("replica update %d failed", updateSectorNo)
+		return nil, xerrors.Errorf("replica update %d failed", seekUpdate.SectorID)
 	}
 	return &seekUpdate.SectorID, nil
 }
