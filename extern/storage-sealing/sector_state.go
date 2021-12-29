@@ -45,7 +45,6 @@ var ExistSectorStateList = map[SectorState]struct{}{
 	Removing:                {},
 	RemoveFailed:            {},
 	Removed:                 {},
-	CCUpdate:                {},
 	SnapDealsWaitDeals:      {},
 	SnapDealsAddPiece:       {},
 	SnapDealsPacking:        {},
@@ -96,7 +95,6 @@ const (
 	Proving        SectorState = "Proving"
 
 	// snap deals / cc update
-	CCUpdate              SectorState = "CCUpdate"
 	SnapDealsWaitDeals    SectorState = "SnapDealsWaitDeals"
 	SnapDealsAddPiece     SectorState = "SnapDealsAddPiece"
 	SnapDealsPacking      SectorState = "SnapDealsPacking"

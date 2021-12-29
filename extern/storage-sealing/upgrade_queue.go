@@ -3,7 +3,6 @@ package sealing
 import (
 	"context"
 
-	"github.com/filecoin-project/go-statemachine"
 	"github.com/filecoin-project/lotus/chain/actors/builtin/miner"
 	market7 "github.com/filecoin-project/specs-actors/v7/actors/builtin/market"
 
@@ -99,11 +98,6 @@ func (m *Sealing) MarkForSnapUpgrade(ctx context.Context, id abi.SectorNumber) e
 
 	log.Errorf("updating sector number %d", id)
 	return m.sectors.Send(uint64(id), SectorStartCCUpdate{})
-}
-
-func (m *Sealing) handleCCUpdate(ctx statemachine.Context, sector SectorInfo) error {
-	log.Errorf("handle CC %d", sector.SectorNumber)
-	return m.sectors.Send(uint64(sector.SectorNumber), SectorStart{})
 }
 
 func (m *Sealing) tryUpgradeSector(ctx context.Context, params *miner.SectorPreCommitInfo) big.Int {

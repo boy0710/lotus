@@ -61,7 +61,7 @@ func runTestCCUpgrade(t *testing.T, upgradeHeight abi.ChainEpoch) *kit.TestFullN
 		require.Less(t, 50000, int(si.Expiration))
 	}
 
-	waitForSectorActive(t, ctx, CCUpgrade, client, maddr)
+	waitForSectorActive(ctx, t, CCUpgrade, client, maddr)
 
 	err = miner.SectorMarkForUpgrade(ctx, sl[0], true)
 	require.NoError(t, err)
@@ -79,6 +79,7 @@ func runTestCCUpgrade(t *testing.T, upgradeHeight abi.ChainEpoch) *kit.TestFullN
 	kit.AssertFilesEqual(t, inPath, outPath)
 
 	status, err := miner.SectorsStatus(ctx, CCUpgrade, true)
+	require.NoError(t, err)
 	assert.Equal(t, 1, len(status.Deals))
 	return client
 }
@@ -95,7 +96,7 @@ func waitForDeadline(ctx context.Context, t *testing.T, waitIdx uint64, node *ki
 	}
 }
 
-func waitForSectorActive(t *testing.T, ctx context.Context, sn abi.SectorNumber, node *kit.TestFullNode, maddr address.Address) {
+func waitForSectorActive(ctx context.Context, t *testing.T, sn abi.SectorNumber, node *kit.TestFullNode, maddr address.Address) {
 	for {
 		active, err := node.StateMinerActiveSectors(ctx, maddr, types.EmptyTSK)
 		require.NoError(t, err)
