@@ -40,7 +40,7 @@ func TestStateRecoverDealIDs(t *testing.T) {
 	sctx := mocks.NewMockContext(mockCtrl)
 	sctx.EXPECT().Context().AnyTimes().Return(ctx)
 
-	api.EXPECT().ChainHead(ctx).Times(1).Return(nil, abi.ChainEpoch(10), nil)
+	api.EXPECT().ChainHead(ctx).Times(2).Return(nil, abi.ChainEpoch(10), nil)
 
 	var dealId abi.DealID = 12
 	dealProposal := market.DealProposal{
