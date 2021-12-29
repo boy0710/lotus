@@ -128,3 +128,48 @@ func TestCCUpgradeAndPoSt(t *testing.T) {
 		})
 	})
 }
+
+func TestTooManyMarkedForUpgrade(t *testing.T) {
+	kit.QuietMiningLogs()
+
+	ctx := context.Background()
+	blockTime := 5 * time.Millisecond
+
+	client, miner, ens := kit.EnsembleMinimal(t, kit.GenesisNetworkVersion(network.Version15))
+	ens.InterconnectAll().BeginMining(blockTime)
+
+	maddr, err := miner.ActorAddress(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	CCUpgrade := abi.SectorNumber(kit.DefaultPresealsPerBootstrapMiner + 1)
+
+	miner.PledgeSectors(ctx, 3, 0, nil)
+
+	sl, err := miner.SectorsList(ctx)
+	require.NoError(t, err)
+	require.Len(t, sl, 3, "expected 3 sectors")
+	require.Equal(t, CCUpgrade, sl[0], "unexpected sector number")
+	require.Equal(t, CCUpgrade+1, sl[1], "unexpected sector number")
+	require.Equal(t, CCUpgrade+2, sl[2], "unexpected sector number")
+	{
+		si, err := client.StateSectorGetInfo(ctx, maddr, CCUpgrade, types.EmptyTSK)
+		require.NoError(t, err)
+		require.Less(t, 50000, int(si.Expiration))
+	}
+
+	waitForSectorActive(ctx, t, CCUpgrade, client, maddr)
+	waitForSectorActive(ctx, t, CCUpgrade+1, client, maddr)
+	waitForSectorActive(ctx, t, CCUpgrade+2, client, maddr)
+
+	err = miner.SectorMarkForUpgrade(ctx, CCUpgrade, true)
+	require.NoError(t, err)
+	err = miner.SectorMarkForUpgrade(ctx, CCUpgrade+1, true)
+	require.NoError(t, err)
+
+	err = miner.SectorMarkForUpgrade(ctx, CCUpgrade+2, true)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no free resources to wait for deals")
+
+}

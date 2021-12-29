@@ -245,7 +245,7 @@ var fsmPlanners = map[SectorState]func(events []statemachine.Event, state *Secto
 		on(SectorUpdateDealIDs{}, SubmitReplicaUpdate),
 		on(SectorAbortUpgrade{}, AbortUpgrade),
 	),
-	AbortUpgrade: planOne(
+	AbortUpgrade: planOneOrIgnore(
 		on(SectorRevertUpgradeToProving{}, Proving),
 	),
 	ReplicaUpdateFailed: planOne(
@@ -744,5 +744,18 @@ func planOne(ts ...func() (mut mutator, next func(*SectorInfo) (more bool, err e
 		}
 
 		return uint64(len(events)), nil
+	}
+}
+
+// planOne but ignores unhandled states without erroring, this prevents the need to handle all possible events creating
+// error during forced override
+func planOneOrIgnore(ts ...func() (mut mutator, next func(*SectorInfo) (more bool, err error))) func(events []statemachine.Event, state *SectorInfo) (uint64, error) {
+	f := planOne(ts...)
+	return func(events []statemachine.Event, state *SectorInfo) (uint64, error) {
+		cnt, err := f(events, state)
+		if err != nil {
+			log.Warnf("planOneOrIgnore: ignoring error from planOne: %s", err)
+		}
+		return cnt, nil
 	}
 }
