@@ -36,7 +36,7 @@ func runTestCCUpgrade(t *testing.T, upgradeHeight abi.ChainEpoch) *kit.TestFullN
 	blockTime := 5 * time.Millisecond
 
 	client, miner, ens := kit.EnsembleMinimal(t, kit.GenesisNetworkVersion(network.Version15))
-	ens.InterconnectAll().BeginMining(blockTime)
+	ens.InterconnectAll().BeginMiningMustPost(blockTime)
 
 	maddr, err := miner.ActorAddress(ctx)
 	if err != nil {
@@ -48,7 +48,7 @@ func runTestCCUpgrade(t *testing.T, upgradeHeight abi.ChainEpoch) *kit.TestFullN
 
 	// wait for deadline 0 to pass so that committing starts after post on preseals
 	// this gives max time for post to complete minimizing chances of timeout
-	waitForDeadline(ctx, t, 1, client, maddr)
+	// waitForDeadline(ctx, t, 1, client, maddr)
 	miner.PledgeSectors(ctx, 1, 0, nil)
 
 	sl, err := miner.SectorsList(ctx)
@@ -144,15 +144,13 @@ func TestTooManyMarkedForUpgrade(t *testing.T) {
 	}
 
 	CCUpgrade := abi.SectorNumber(kit.DefaultPresealsPerBootstrapMiner + 1)
-
+	waitForDeadline(ctx, t, 1, client, maddr)
 	miner.PledgeSectors(ctx, 3, 0, nil)
 
 	sl, err := miner.SectorsList(ctx)
 	require.NoError(t, err)
 	require.Len(t, sl, 3, "expected 3 sectors")
-	require.Equal(t, CCUpgrade, sl[0], "unexpected sector number")
-	require.Equal(t, CCUpgrade+1, sl[1], "unexpected sector number")
-	require.Equal(t, CCUpgrade+2, sl[2], "unexpected sector number")
+
 	{
 		si, err := client.StateSectorGetInfo(ctx, maddr, CCUpgrade, types.EmptyTSK)
 		require.NoError(t, err)
