@@ -71,6 +71,10 @@ func (m *Miner) CommitPending(ctx context.Context) ([]abi.SectorID, error) {
 	return m.sealing.CommitPending(ctx)
 }
 
+func (m *Miner) SectorMatchPendingPiecesToOpenSectors(ctx context.Context) error {
+	return m.sealing.MatchPendingPiecesToOpenSectors(ctx)
+}
+
 func (m *Miner) MarkForUpgrade(ctx context.Context, id abi.SectorNumber, snap bool) error {
 	if snap {
 		return m.sealing.MarkForSnapUpgrade(ctx, id)

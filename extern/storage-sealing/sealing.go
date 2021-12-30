@@ -122,10 +122,22 @@ type Sealing struct {
 }
 
 type openSector struct {
-	used       abi.UnpaddedPieceSize // change to bitfield/rle when AddPiece gains offset support to better fill sectors
-	expiration abi.ChainEpoch
+	used     abi.UnpaddedPieceSize // change to bitfield/rle when AddPiece gains offset support to better fill sectors
+	number   abi.SectorNumber
+	ccUpdate bool
 
 	maybeAccept func(cid.Cid) error // called with inputLk
+}
+
+func (o *openSector) expiresBefore(dealEnd abi.ChainEpoch, expF func(sn abi.SectorNumber) (abi.ChainEpoch, error)) (bool, error) {
+	if !o.ccUpdate {
+		return true, nil
+	}
+	expiration, err := expF(o.number)
+	if err != nil {
+		return false, err
+	}
+	return expiration < dealEnd, nil
 }
 
 type pendingPiece struct {

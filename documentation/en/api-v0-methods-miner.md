@@ -119,6 +119,7 @@
   * [SectorGetExpectedSealDuration](#SectorGetExpectedSealDuration)
   * [SectorGetSealDelay](#SectorGetSealDelay)
   * [SectorMarkForUpgrade](#SectorMarkForUpgrade)
+  * [SectorMatchPendingPiecesToOpenSectors](#SectorMatchPendingPiecesToOpenSectors)
   * [SectorPreCommitFlush](#SectorPreCommitFlush)
   * [SectorPreCommitPending](#SectorPreCommitPending)
   * [SectorRemove](#SectorRemove)
@@ -1965,6 +1966,15 @@ Inputs:
   true
 ]
 ```
+
+Response: `{}`
+
+### SectorMatchPendingPiecesToOpenSectors
+
+
+Perms: admin
+
+Inputs: `null`
 
 Response: `{}`
 

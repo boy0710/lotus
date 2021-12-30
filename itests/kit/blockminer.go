@@ -137,6 +137,7 @@ func (bm *BlockMiner) MineBlocksMustPost(ctx context.Context, blocktime time.Dur
 								return
 							case evt := <-poolEvts:
 								if evt.Type == api.MpoolAdd {
+									bm.t.Logf("incoming message %v", evt.Message)
 									if tracker.recordIfPost(bm.t, bm, evt.Message) {
 										break POOL
 									}

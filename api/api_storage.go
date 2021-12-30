@@ -112,6 +112,7 @@ type StorageMiner interface {
 	SectorCommitFlush(ctx context.Context) ([]sealiface.CommitBatchRes, error) //perm:admin
 	// SectorCommitPending returns a list of pending Commit sectors to be sent in the next aggregate message
 	SectorCommitPending(ctx context.Context) ([]abi.SectorID, error) //perm:admin
+	SectorMatchPendingPiecesToOpenSectors(ctx context.Context) error //perm:admin
 
 	// WorkerConnect tells the node to connect to workers RPC
 	WorkerConnect(context.Context, string) error                              //perm:admin retry:true

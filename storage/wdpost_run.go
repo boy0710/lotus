@@ -644,13 +644,11 @@ func (s *WindowPoStScheduler) runPoStCycle(ctx context.Context, di dline.Info, t
 			}()
 			postOut, ps, err := s.prover.GenerateWindowPoSt(ctx, abi.ActorID(mid), xsinfos, append(abi.PoStRandomness{}, rand...))
 			elapsed := time.Since(tsStart)
-			log.Errorf("A")
 			log.Infof("computing window post", "batch", batchIdx, "elapsed", elapsed)
 			if err != nil {
 				log.Errorf("error generating window post: %s", err)
 			}
 			if err == nil {
-				log.Errorf("B")
 
 				// If we proved nothing, something is very wrong.
 				if len(postOut) == 0 {
@@ -662,7 +660,6 @@ func (s *WindowPoStScheduler) runPoStCycle(ctx context.Context, di dline.Info, t
 				if err != nil {
 					return nil, xerrors.Errorf("getting current head: %w", err)
 				}
-				log.Errorf("C")
 
 				checkRand, err := s.api.StateGetRandomnessFromBeacon(ctx, crypto.DomainSeparationTag_WindowedPoStChallengeSeed, di.Challenge, buf.Bytes(), headTs.Key())
 				if err != nil {
@@ -691,18 +688,13 @@ func (s *WindowPoStScheduler) runPoStCycle(ctx context.Context, di dline.Info, t
 					ChallengedSectors: sinfos,
 					Prover:            abi.ActorID(mid),
 				}); err != nil {
-					log.Errorf("E")
-
 					log.Errorf("window post verification failed", "post", postOut, "error", err)
 					time.Sleep(5 * time.Second)
 					continue
 				} else if !correct {
-					log.Errorf("F")
-
 					log.Errorf("generated incorrect window post proof", "post", postOut, "error", err)
 					continue
 				}
-				log.Errorf("G")
 
 				log.Errorf("we got a correct window post")
 
@@ -712,7 +704,6 @@ func (s *WindowPoStScheduler) runPoStCycle(ctx context.Context, di dline.Info, t
 				params.Proofs = postOut
 				break
 			}
-			log.Errorf("H")
 
 			// Proof generation failed, so retry
 			log.Errorf("Retry")

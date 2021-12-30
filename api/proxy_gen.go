@@ -761,6 +761,8 @@ type StorageMinerStruct struct {
 
 		SectorMarkForUpgrade func(p0 context.Context, p1 abi.SectorNumber, p2 bool) error `perm:"admin"`
 
+		SectorMatchPendingPiecesToOpenSectors func(p0 context.Context) error `perm:"admin"`
+
 		SectorPreCommitFlush func(p0 context.Context) ([]sealiface.PreCommitBatchRes, error) `perm:"admin"`
 
 		SectorPreCommitPending func(p0 context.Context) ([]abi.SectorID, error) `perm:"admin"`
@@ -4478,6 +4480,17 @@ func (s *StorageMinerStruct) SectorMarkForUpgrade(p0 context.Context, p1 abi.Sec
 }
 
 func (s *StorageMinerStub) SectorMarkForUpgrade(p0 context.Context, p1 abi.SectorNumber, p2 bool) error {
+	return ErrNotSupported
+}
+
+func (s *StorageMinerStruct) SectorMatchPendingPiecesToOpenSectors(p0 context.Context) error {
+	if s.Internal.SectorMatchPendingPiecesToOpenSectors == nil {
+		return ErrNotSupported
+	}
+	return s.Internal.SectorMatchPendingPiecesToOpenSectors(p0)
+}
+
+func (s *StorageMinerStub) SectorMatchPendingPiecesToOpenSectors(p0 context.Context) error {
 	return ErrNotSupported
 }
 

@@ -57,6 +57,7 @@ var sectorsCmd = &cli.Command{
 		sectorsSealDelayCmd,
 		sectorsCapacityCollateralCmd,
 		sectorsBatching,
+		sectorsRefreshPieceMatchingCmd,
 	},
 }
 
@@ -2050,6 +2051,25 @@ var sectorsBatchingPendingPreCommit = &cli.Command{
 		}
 
 		fmt.Println("No sectors queued to be committed")
+		return nil
+	},
+}
+
+var sectorsRefreshPieceMatchingCmd = &cli.Command{
+	Name:  "match-pending-pieces",
+	Usage: "force a refreshed match of pending pieces to open sectors without manually without waiting for more deals",
+	Action: func(cctx *cli.Context) error {
+		nodeApi, closer, err := lcli.GetStorageMinerAPI(cctx)
+		if err != nil {
+			return err
+		}
+		defer closer()
+		ctx := lcli.ReqContext(cctx)
+
+		if err := nodeApi.SectorMatchPendingPiecesToOpenSectors(ctx); err != nil {
+			return err
+		}
+
 		return nil
 	},
 }

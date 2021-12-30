@@ -399,6 +399,10 @@ func (sm *StorageMinerAPI) SectorCommitPending(ctx context.Context) ([]abi.Secto
 	return sm.Miner.CommitPending(ctx)
 }
 
+func (sm *StorageMinerAPI) SectorMatchPendingPiecesToOpenSectors(ctx context.Context) error {
+	return sm.Miner.SectorMatchPendingPiecesToOpenSectors(ctx)
+}
+
 func (sm *StorageMinerAPI) WorkerConnect(ctx context.Context, url string) error {
 	w, err := connectRemoteWorker(ctx, sm, url)
 	if err != nil {
