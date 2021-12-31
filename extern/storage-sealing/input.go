@@ -383,7 +383,7 @@ func (m *Sealing) updateInput(ctx context.Context, sp abi.RegisteredSealProof) e
 				}
 				return onChainInfo.Expiration, nil
 			}
-			ok, err := sector.expiresBefore(piece.deal.DealProposal.EndEpoch, expF)
+			ok, err := sector.dealFitsInLifetime(piece.deal.DealProposal.EndEpoch, expF)
 			if err != nil {
 				log.Errorf("failed to check expiration for cc Update sector %d", sector.number)
 				continue

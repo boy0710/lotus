@@ -129,7 +129,7 @@ type openSector struct {
 	maybeAccept func(cid.Cid) error // called with inputLk
 }
 
-func (o *openSector) expiresBefore(dealEnd abi.ChainEpoch, expF func(sn abi.SectorNumber) (abi.ChainEpoch, error)) (bool, error) {
+func (o *openSector) dealFitsInLifetime(dealEnd abi.ChainEpoch, expF func(sn abi.SectorNumber) (abi.ChainEpoch, error)) (bool, error) {
 	if !o.ccUpdate {
 		return true, nil
 	}
@@ -137,7 +137,7 @@ func (o *openSector) expiresBefore(dealEnd abi.ChainEpoch, expF func(sn abi.Sect
 	if err != nil {
 		return false, err
 	}
-	return expiration < dealEnd, nil
+	return expiration >= dealEnd, nil
 }
 
 type pendingPiece struct {
